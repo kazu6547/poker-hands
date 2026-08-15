@@ -6,7 +6,8 @@ import {
   FEEDBACK_SETTINGS_EVENT,
   FEEDBACK_SETTINGS_KEY,
   FeedbackSettings,
-  canVibrate,
+  HapticsKind,
+  hapticsKind,
   loadFeedbackSettings,
   saveFeedbackSettings,
 } from '@/lib/feedbackFx';
@@ -62,16 +63,17 @@ function subscribe(listener: () => void): () => void {
 
 /* 振動対応の有無は端末ごとに固定なので、購読不要のスナップショットとして扱う */
 const subscribeVibration = () => () => {};
-const getVibrationSnapshot = () => canVibrate();
-const getVibrationServerSnapshot = () => false;
+const getVibrationSnapshot = (): HapticsKind => hapticsKind();
+const getVibrationServerSnapshot = (): HapticsKind => 'none';
 
 export function useFeedbackSettings() {
   const settings = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  const vibrationSupported = useSyncExternalStore(
+  const vibrationKind = useSyncExternalStore(
     subscribeVibration,
     getVibrationSnapshot,
     getVibrationServerSnapshot,
   );
+  const vibrationSupported = vibrationKind !== 'none';
   const isReady = useIsHydrated();
 
   const update = useCallback((patch: Partial<Omit<FeedbackSettings, 'version'>>) => {
@@ -82,5 +84,5 @@ export function useFeedbackSettings() {
     emitChange();
   }, []);
 
-  return { settings, isReady, vibrationSupported, update };
+  return { settings, isReady, vibrationSupported, vibrationKind, update };
 }

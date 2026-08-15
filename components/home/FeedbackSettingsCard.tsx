@@ -4,6 +4,7 @@ import { Vibrate, Volume2, VolumeX } from 'lucide-react';
 import { useFeedbackSettings } from '@/hooks/useFeedbackSettings';
 import { cn } from '@/lib/cn';
 import { playSound } from '@/lib/feedbackFx';
+import { HapticsKind, previewHaptics } from '@/lib/haptics';
 
 interface ToggleRowProps {
   label: string;
@@ -61,9 +62,16 @@ function ToggleRow({ label, description, checked, disabled = false, onChange, ch
   );
 }
 
+/** 端末ごとに、振動でできることが違うので説明を変える */
+const VIBRATION_DESCRIPTION: Record<HapticsKind, string> = {
+  vibration: 'スマホで軽く振動させる',
+  switch: 'iPhone / iPad で軽い触覚フィードバックを返す',
+  none: 'この端末は振動に対応していません',
+};
+
 /** 効果音・振動の設定（ホーム下部の控えめな導線） */
 export function FeedbackSettingsCard() {
-  const { settings, isReady, vibrationSupported, update } = useFeedbackSettings();
+  const { settings, isReady, vibrationSupported, vibrationKind, update } = useFeedbackSettings();
 
   return (
     <section className="panel p-4" aria-label="サウンドと振動の設定" aria-busy={!isReady}>
@@ -88,14 +96,26 @@ export function FeedbackSettingsCard() {
 
         <ToggleRow
           label="振動"
-          description={vibrationSupported ? 'スマホで軽く振動させる' : 'この端末は振動に対応していません'}
+          description={VIBRATION_DESCRIPTION[vibrationKind]}
           checked={settings.vibration && vibrationSupported}
           disabled={!vibrationSupported}
-          onChange={(value) => update({ vibration: value })}
+          onChange={(value) => {
+            update({ vibration: value });
+            // ONにしたときだけ、実際に返るかどうかその場で分かるように一度動かす
+            if (value) previewHaptics();
+          }}
         >
           <Vibrate className="h-4 w-4" aria-hidden="true" />
         </ToggleRow>
       </div>
+
+      {vibrationKind === 'switch' ? (
+        <p className="mt-3 text-[0.7rem] leading-relaxed text-slate-500">
+          iPhone / iPad の Safari は振動そのものを鳴らせないため、軽いタップ感だけを返します。
+          iOS 17.4 以降で、設定 &gt; サウンドと触覚 &gt;
+          システムハプティクスがオンのときに動作します。
+        </p>
+      ) : null}
     </section>
   );
 }

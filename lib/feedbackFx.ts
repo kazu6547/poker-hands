@@ -1,3 +1,4 @@
+import { hapticsKind, playHaptics } from './haptics';
 import {
   IMPORTANT_PRIORITY,
   IMPORTANT_QUIET_MS,
@@ -63,11 +64,18 @@ export function saveFeedbackSettings(settings: FeedbackSettings): void {
   }
 }
 
-/** この端末が振動に対応しているか */
+/**
+ * この端末が振動（触覚フィードバック）に対応しているか。
+ * iPhone / iPad は Vibration API を持たないが、iOS 17.4 以降なら
+ * スイッチ操作の触覚を借りられるので、そちらも対応として扱う。
+ */
 export function canVibrate(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  return typeof navigator.vibrate === 'function';
+  return hapticsKind() !== 'none';
 }
+
+/** 対応している触覚フィードバックの種類（設定画面の説明文で使う） */
+export { hapticsKind };
+export type { HapticsKind } from './haptics';
 
 /* ------------------------------------------------------------------ */
 /* 音の生成                                                            */
@@ -177,17 +185,7 @@ export function primeAudio(): void {
 }
 
 function vibrate(pattern: readonly number[] | undefined): void {
-  if (!pattern || !canVibrate()) return;
-
-  // ユーザー操作前の呼び出しはブラウザにブロックされるため、その場合は何もしない
-  const activation = navigator.userActivation;
-  if (activation && !activation.hasBeenActive) return;
-
-  try {
-    navigator.vibrate([...pattern]);
-  } catch {
-    // 非対応・拒否されても何もしない
-  }
+  playHaptics(pattern);
 }
 
 /** 同じ音の連打と、重要な音への被りを防ぐための記録 */
