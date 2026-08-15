@@ -374,8 +374,11 @@ function weightedSample<T>(items: readonly T[], count: number, weightOf: (item: 
  */
 export function generateBuildPuzzle(previousTarget?: HandId | null): BuildPuzzle {
   const candidates = BUILD_TARGETS.filter((handId) => handId !== previousTarget);
-  const targetHandId = pickOne(candidates.length > 0 ? candidates : BUILD_TARGETS);
+  return createBuildPuzzle(pickOne(candidates.length > 0 ? candidates : BUILD_TARGETS));
+}
 
+/** お題を指定して問題を作る */
+function createBuildPuzzle(targetHandId: HandId): BuildPuzzle {
   const solution = generateHandOfType(targetHandId);
   const solutionIds = solution.map((card) => card.id);
   const solutionIdSet = new Set(solutionIds);
@@ -397,4 +400,23 @@ export function generateBuildPuzzle(previousTarget?: HandId | null): BuildPuzzle
     board: shuffle([...solution, ...extras]),
     solutionIds,
   };
+}
+
+/**
+ * 10問など、まとまった数のお題を作る。
+ * 9役をシャッフルして順に使うことで、同じお題ばかり続くのを防ぐ。
+ */
+export function generateBuildPuzzleSet(count: number): BuildPuzzle[] {
+  const order: HandId[] = [];
+
+  while (order.length < count) {
+    for (const handId of shuffle(BUILD_TARGETS)) {
+      if (order.length >= count) break;
+      // 直前と同じお題は避ける
+      if (order.length > 0 && order[order.length - 1] === handId) continue;
+      order.push(handId);
+    }
+  }
+
+  return order.map((handId) => createBuildPuzzle(handId));
 }

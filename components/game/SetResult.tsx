@@ -3,6 +3,7 @@ import { ReactNode } from 'react';
 import { Home, RefreshCw, SlidersHorizontal, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { buttonClasses } from '@/components/ui/buttonStyles';
+import { cn } from '@/lib/cn';
 import { accuracyPercent } from '@/lib/progress';
 
 export interface SetResultProps {
@@ -11,7 +12,8 @@ export interface SetResultProps {
   /** 成績の下に置く追加情報（苦手だった役など） */
   children?: ReactNode;
   onRetry: () => void;
-  onChangeDifficulty: () => void;
+  /** 難易度のあるモードだけ渡す（無い場合はボタンを出さない） */
+  onChangeDifficulty?: () => void;
 }
 
 /** 10問終了後の共通結果画面 */
@@ -51,15 +53,17 @@ export function SetResult({ total, correct, children, onRetry, onChangeDifficult
 
       {children}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className={cn('grid gap-3', onChangeDifficulty ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
         <Button size="lg" fullWidth onClick={onRetry}>
           <RefreshCw className="h-4 w-4" aria-hidden="true" />
           もう一度挑戦
         </Button>
-        <Button size="lg" variant="secondary" fullWidth onClick={onChangeDifficulty}>
-          <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-          難易度を変える
-        </Button>
+        {onChangeDifficulty ? (
+          <Button size="lg" variant="secondary" fullWidth onClick={onChangeDifficulty}>
+            <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
+            難易度を変える
+          </Button>
+        ) : null}
         <Link href="/" className={buttonClasses({ variant: 'secondary', size: 'lg', fullWidth: true })}>
           <Home className="h-4 w-4" aria-hidden="true" />
           ホームへ戻る

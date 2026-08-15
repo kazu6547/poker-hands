@@ -1,29 +1,23 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ArrowRight,
-  CheckCircle2,
-  Eraser,
-  Lightbulb,
-  Layers,
-  Sparkles,
-  Trophy,
-  XCircle,
-} from 'lucide-react';
+import { ArrowRight, CheckCircle2, Eraser, Lightbulb, Sparkles, XCircle } from 'lucide-react';
 import { CardBoard } from '@/components/cards/CardBoard';
+import { GameStatsBar } from '@/components/game/GameStatsBar';
+import { SetResult } from '@/components/game/SetResult';
 import { Button } from '@/components/ui/Button';
-import { StatPill } from '@/components/ui/StatPill';
 import { HANDS_BY_ID } from '@/data/hands';
 import { useProgress } from '@/hooks/useProgress';
 import { cn } from '@/lib/cn';
 import { currentHandName, describeShortfall } from '@/lib/feedback';
 import { playFeedback } from '@/lib/feedbackFx';
-import { generateBuildPuzzle } from '@/lib/generator';
+import { generateBuildPuzzleSet } from '@/lib/generator';
 import { evaluateHand } from '@/lib/evaluator';
 import { BuildPuzzle, Card } from '@/lib/types';
 
 const REQUIRED_CARDS = 5;
+/** 他のモードと同じく10問で1セット */
+const PUZZLES_PER_SET = 10;
 
 type CheckResult =
   | { status: 'idle' }
@@ -34,14 +28,20 @@ type CheckResult =
 export function BuildGame() {
   const { recordBuildResult } = useProgress();
 
-  const [puzzle, setPuzzle] = useState<BuildPuzzle | null>(null);
+  const [puzzles, setPuzzles] = useState<BuildPuzzle[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [hintLevel, setHintLevel] = useState(0);
   const [hintedId, setHintedId] = useState<string | null>(null);
   const [result, setResult] = useState<CheckResult>({ status: 'idle' });
-  const [clearedCount, setClearedCount] = useState(0);
+  const [phase, setPhase] = useState<'playing' | 'result'>('playing');
+  const [index, setIndex] = useState(0);
+  /** 一発で正解できた数（間違えても何度でも挑戦できる設計は維持する） */
+  const [firstTryCount, setFirstTryCount] = useState(0);
+  const [streak, setStreak] = useState(0);
   /** 「答え合わせ」の連打で挑戦回数が二重に増えないようにする鍵（選び直すと解除） */
   const checkLockRef = useRef(false);
+  /** この問題で一度でも間違えたか */
+  const missedRef = useRef(false);
 
   /**
    * 初回の問題はマウント後に生成する（サーバーとクライアントで内容がずれないように）。
@@ -49,7 +49,9 @@ export function BuildGame() {
    * 「effect 内で setState しない」ルールはこの1箇所だけ意図的に除外する。
    */
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => setPuzzle(generateBuildPuzzle()), []);
+  useEffect(() => setPuzzles(generateBuildPuzzleSet(PUZZLES_PER_SET)), []);
+
+  const puzzle: BuildPuzzle | undefined = puzzles[index];
 
   const selectedCards = useMemo(() => {
     if (!puzzle) return [];
@@ -62,15 +64,35 @@ export function BuildGame() {
   const isCleared = result.status === 'correct';
   const targetHand = puzzle ? HANDS_BY_ID[puzzle.targetHandId] : null;
 
-  const startNextPuzzle = useCallback(() => {
-    playFeedback('next');
+  /** 選択・ヒント・結果をまっさらに戻す */
+  const resetPuzzleState = useCallback(() => {
     checkLockRef.current = false;
-    setPuzzle((current) => generateBuildPuzzle(current?.targetHandId ?? null));
+    missedRef.current = false;
     setSelectedIds([]);
     setHintLevel(0);
     setHintedId(null);
     setResult({ status: 'idle' });
   }, []);
+
+  const startNextPuzzle = useCallback(() => {
+    playFeedback('next');
+    if (index + 1 >= PUZZLES_PER_SET) {
+      setPhase('result');
+      return;
+    }
+    setIndex((current) => current + 1);
+    resetPuzzleState();
+  }, [index, resetPuzzleState]);
+
+  /** 結果画面から、もう一度10問挑戦する */
+  const restartSet = useCallback(() => {
+    setPhase('playing');
+    setIndex(0);
+    setFirstTryCount(0);
+    setStreak(0);
+    setPuzzles(generateBuildPuzzleSet(PUZZLES_PER_SET));
+    resetPuzzleState();
+  }, [resetPuzzleState]);
 
   const toggleCard = useCallback(
     (card: Card) => {
@@ -108,11 +130,17 @@ export function BuildGame() {
     recordBuildResult(succeeded);
 
     if (succeeded) {
-      setClearedCount((current) => current + 1);
+      if (missedRef.current) {
+        setStreak(0);
+      } else {
+        setFirstTryCount((current) => current + 1);
+        setStreak((current) => current + 1);
+      }
       setResult({ status: 'correct' });
       return;
     }
 
+    missedRef.current = true;
     setResult({
       status: 'wrong',
       madeHandName: currentHandName(selectedCards),
@@ -160,6 +188,10 @@ export function BuildGame() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isCleared, isReadyToCheck, checkAnswer, startNextPuzzle]);
 
+  if (phase === 'result') {
+    return <SetResult total={PUZZLES_PER_SET} correct={firstTryCount} onRetry={restartSet} />;
+  }
+
   if (!puzzle || !targetHand) {
     return <div className="min-h-[60vh]" aria-hidden="true" />;
   }
@@ -174,16 +206,14 @@ export function BuildGame() {
           </p>
         </div>
 
-        <div className="flex gap-2">
-          <StatPill icon={Layers} label="選択中" value={`${selectedIds.length} / 5枚`} />
-          <StatPill icon={Trophy} label="クリア" value={`${clearedCount}問`} tone="emerald" />
-          <StatPill
-            icon={Lightbulb}
-            label="ヒント"
-            value={hintLevel === 0 ? '未使用' : `${hintLevel}回`}
-            tone="gold"
-          />
-        </div>
+        <GameStatsBar
+          current={index + 1}
+          total={PUZZLES_PER_SET}
+          correct={firstTryCount}
+          streak={streak}
+          isAnswered={isCleared}
+          correctLabel="一発正解"
+        />
       </header>
 
       {/*
@@ -225,7 +255,9 @@ export function BuildGame() {
         />
         <p className="mt-6 text-center text-xs text-slate-500">
           {isCleared
-            ? 'お見事！ 「次のお題へ」で続けられます'
+            ? index + 1 >= PUZZLES_PER_SET
+              ? 'お見事！ 「結果を見る」で成績を確認しましょう'
+              : 'お見事！ 「次のお題へ」で続けられます'
             : isReadyToCheck
               ? '5枚そろいました。答え合わせをしてみましょう（Enter キーでもOK）'
               : `カードをタップして選びます（あと ${REQUIRED_CARDS - selectedIds.length} 枚）`}
@@ -271,7 +303,7 @@ export function BuildGame() {
       <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap gap-3 border-t border-white/10 bg-midnight-950/90 px-4 pt-3 pb-safe backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0">
         {isCleared ? (
           <Button size="lg" fullWidth onClick={startNextPuzzle}>
-            次のお題へ
+            {index + 1 >= PUZZLES_PER_SET ? '結果を見る' : '次のお題へ'}
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </Button>
         ) : (
