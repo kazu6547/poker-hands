@@ -64,7 +64,7 @@ describe('記録の更新', () => {
     assert.deepEqual(progress.handStats.flush, { attempts: 2, correct: 1 });
   });
 
-  it('強さ比較・最強の5枚：モードごとの成績と全体の集計が増える', () => {
+  it('VSカード・最強の5枚：モードごとの成績と全体の集計が増える', () => {
     let progress = createEmptyProgress();
     progress = applyModeAnswer(progress, 'compare', true);
     progress = applyModeAnswer(progress, 'compare', true);

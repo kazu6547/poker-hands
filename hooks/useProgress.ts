@@ -77,7 +77,7 @@ export function useProgress() {
     updateProgress((current) => applyBuildResult(current, isCleared));
   }, []);
 
-  /** 「強さ比較」「最強の5枚を選ぶ」の回答を記録する */
+  /** 「VSカード」「最強の5枚」の回答を記録する */
   const recordModeAnswer = useCallback((mode: StatModeId, isCorrect: boolean) => {
     updateProgress((current) => applyModeAnswer(current, mode, isCorrect));
   }, []);

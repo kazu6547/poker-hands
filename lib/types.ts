@@ -142,9 +142,9 @@ export interface ProgressData {
   buildAttempts: number;
   /** 「役を作る」モードの成功回数 */
   buildCleared: number;
-  /** 「強さ比較」モードの成績（version 2 で追加） */
+  /** 「VSカード」モードの成績（version 2 で追加。保存キーは compare のまま） */
   compare: ModeStat;
-  /** 「最強の5枚を選ぶ」モードの成績（version 2 で追加） */
+  /** 「最強の5枚」モードの成績（version 2 で追加。保存キーは bestFive のまま） */
   bestFive: ModeStat;
   /** 最後に学習した日時（ISO文字列） */
   lastStudiedAt: string | null;

@@ -2,15 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Layers, ListOrdered, Scale, Spade, Target } from 'lucide-react';
+import { Layers, ListOrdered, Spade, Sparkles, Swords, Target } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 /** primary: false の項目は、幅に余裕のある画面でのみ表示する */
 const NAV_ITEMS = [
   { href: '/quiz', label: '役を当てる', short: '当てる', icon: Target, primary: true },
   { href: '/build', label: '役を作る', short: '作る', icon: Layers, primary: true },
-  { href: '/compare', label: '強さ比較', short: '比較', icon: Scale, primary: false },
-  { href: '/best-five', label: '最強の5枚', short: '5枚', icon: Layers, primary: false },
+  { href: '/compare', label: 'VSカード', short: 'VS', icon: Swords, primary: false },
+  { href: '/best-five', label: '最強の5枚', short: '5枚', icon: Sparkles, primary: false },
   { href: '/hands', label: '役一覧', short: '一覧', icon: ListOrdered, primary: true },
 ];
 

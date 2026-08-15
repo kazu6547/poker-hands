@@ -4,7 +4,7 @@ import { HAND_STRENGTH, compareEvaluations, evaluateHand } from './evaluator';
 import { Card, Difficulty, HandEvaluation, Rank, SUITS } from './types';
 
 /**
- * 「最強の5枚を選ぶ」モード。
+ * 「最強の5枚」モード。
  * 7枚から作れる 21 通りの5枚をすべて評価し、いちばん強い組み合わせを求める。
  */
 

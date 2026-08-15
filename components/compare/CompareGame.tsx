@@ -35,7 +35,7 @@ const LEVEL_DESCRIPTIONS: Record<Difficulty, string> = {
 
 type Phase = 'setup' | 'playing' | 'result';
 
-/** 学習モード：強さ比較 */
+/** 学習モード：VSカード（AとBの手を見比べる） */
 export function CompareGame() {
   const { recordModeAnswer } = useProgress();
   const session = useGameSession();
@@ -136,7 +136,7 @@ export function CompareGame() {
   if (phase === 'setup') {
     return (
       <DifficultyPicker
-        title="強さ比較"
+        title="VSカード"
         description="AとB、2つの手を見比べて強いほうを選びます。全10問。難易度を選んではじめましょう。"
         levelDescriptions={LEVEL_DESCRIPTIONS}
         onSelect={start}
@@ -165,7 +165,7 @@ export function CompareGame() {
       <header className="space-y-3">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="eyebrow">強さ比較</p>
+            <p className="eyebrow">VSカード</p>
             <p className="mt-1 text-xs text-slate-500">{DIFFICULTY_LABELS[difficulty].name}レベル</p>
           </div>
           <button
@@ -271,7 +271,7 @@ export function CompareGame() {
 
       {isQuitOpen ? (
         <QuitPracticeDialog
-          modeName="強さ比較"
+          modeName="VSカード"
           answered={session.index + (isAnswered ? 1 : 0)}
           correct={session.correctCount}
           streak={session.streak}

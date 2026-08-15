@@ -4,7 +4,7 @@ import { HAND_IDS, HandId, HandStat, ModeStat, ProgressData, StatModeId } from '
  * 学習記録（localStorage）。
  *
  * 保存形式が変わっても壊れないよう、読み込み時に必ず既定値とマージする。
- * version 1（強さ比較・最強の5枚を選ぶ が無い形式）で保存されたデータも、
+ * version 1（VSカード・最強の5枚 が無い形式）で保存されたデータも、
  * そのまま読み込んで不足分を 0 で補う。
  */
 
@@ -147,7 +147,7 @@ export function applyQuizAnswer(
   };
 }
 
-/** 「強さ比較」「最強の5枚を選ぶ」：全体の集計＋モードごとの成績 */
+/** 「VSカード」「最強の5枚」：全体の集計＋モードごとの成績 */
 export function applyModeAnswer(
   progress: ProgressData,
   mode: StatModeId,

@@ -5,7 +5,7 @@ import { DIFFICULTY_POOLS, generateHandOfType } from './generator';
 import { Card, Difficulty, HandEvaluation, HandId, RANKS, Rank, SUITS, Suit } from './types';
 
 /**
- * 「強さ比較」モードの問題生成。
+ * 「VSカード」モードの問題生成。
  * 役の判定・比較は既存の evaluateHand / compareEvaluations をそのまま使う。
  */
 

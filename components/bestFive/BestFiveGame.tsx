@@ -35,7 +35,7 @@ const LEVEL_DESCRIPTIONS: Record<Difficulty, string> = {
 
 type Phase = 'setup' | 'playing' | 'result';
 
-/** 学習モード：最強の5枚を選ぶ */
+/** 学習モード：最強の5枚 */
 export function BestFiveGame() {
   const { recordModeAnswer } = useProgress();
   const session = useGameSession();
@@ -147,7 +147,7 @@ export function BestFiveGame() {
   if (phase === 'setup') {
     return (
       <DifficultyPicker
-        title="最強の5枚を選ぶ"
+        title="最強の5枚"
         description="手札2枚と場の5枚、合計7枚からいちばん強い5枚を選びます。全10問。"
         levelDescriptions={LEVEL_DESCRIPTIONS}
         onSelect={start}
@@ -193,7 +193,7 @@ export function BestFiveGame() {
       <header className="space-y-3">
         <div className="flex items-end justify-between gap-3">
           <div>
-            <p className="eyebrow">最強の5枚を選ぶ</p>
+            <p className="eyebrow">最強の5枚</p>
             <p className="mt-1 text-xs text-slate-500">{DIFFICULTY_LABELS[difficulty].name}レベル</p>
           </div>
           <button
@@ -285,7 +285,7 @@ export function BestFiveGame() {
 
       {isQuitOpen ? (
         <QuitPracticeDialog
-          modeName="最強の5枚を選ぶ"
+          modeName="最強の5枚"
           answered={session.index + (isAnswered ? 1 : 0)}
           correct={session.correctCount}
           streak={session.streak}

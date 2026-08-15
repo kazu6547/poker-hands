@@ -8,7 +8,7 @@ import { buttonClasses } from '@/components/ui/buttonStyles';
 import { accuracyPercent } from '@/lib/progress';
 
 export interface QuitPracticeDialogProps {
-  /** 「強さ比較を終了しますか？」のように使うモード名 */
+  /** 「VSカードを終了しますか？」のように使うモード名 */
   modeName: string;
   answered: number;
   correct: number;

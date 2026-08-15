@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowRight, Layers, ListOrdered, Scale, Target } from 'lucide-react';
+import { ArrowRight, Layers, ListOrdered, Sparkles, Swords, Target } from 'lucide-react';
 import { FeedbackSettingsCard } from '@/components/home/FeedbackSettingsCard';
 import { GettingStarted } from '@/components/home/GettingStarted';
 import { HeroCardFan } from '@/components/home/HeroCardFan';
@@ -54,15 +54,15 @@ export default function HomePage() {
         <div className="grid gap-3 sm:grid-cols-2">
           <SecondaryModeCard
             href="/compare"
-            title="強さ比較"
-            description="2つの手を見比べて、より強い役を選ぼう。"
-            icon={Scale}
+            title="VSカード"
+            description="2つの手を見比べて、勝つカードを選ぼう。"
+            icon={Swords}
           />
           <SecondaryModeCard
             href="/best-five"
-            title="最強の5枚を選ぶ"
-            description="7枚のカードから、勝てる5枚を見つけよう。"
-            icon={Layers}
+            title="最強の5枚"
+            description="7枚のカードから、最強の5枚を見つけよう。"
+            icon={Sparkles}
           />
         </div>
       </section>
