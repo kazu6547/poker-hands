@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { AudioPrimer } from '@/components/layout/AudioPrimer';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import './globals.css';
 
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ja">
       <body className="min-h-dvh">
+        <AudioPrimer />
         <SiteHeader />
         <main className="mx-auto w-full max-w-5xl px-4 pb-12 pt-6 sm:pt-8">{children}</main>
         <footer className="border-t border-white/5 px-4 py-6 text-center text-xs leading-relaxed text-slate-500">

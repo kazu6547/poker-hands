@@ -101,8 +101,12 @@ const VIBRATION_PATTERNS: Record<FeedbackKind, number[] | null> = {
 
 type AudioContextConstructor = new () => AudioContext;
 
+/** 予約を少しだけ先に置くための余裕（秒） */
+const SCHEDULE_LEAD_SEC = 0.03;
+
 let audioContext: AudioContext | null = null;
 
+/** AudioContext を用意する（再開はしない） */
 function getAudioContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -113,20 +117,17 @@ function getAudioContext(): AudioContext | null {
     const Ctor = holder.AudioContext ?? holder.webkitAudioContext;
     if (!Ctor) return null;
     if (!audioContext) audioContext = new Ctor();
-    // 自動再生制限で止まっている場合は、ユーザー操作のタイミングで再開する
-    if (audioContext.state === 'suspended') void audioContext.resume();
     return audioContext;
   } catch {
     return null;
   }
 }
 
-function playSound(kind: FeedbackKind): void {
-  const context = getAudioContext();
-  if (!context) return;
-
+/** 音を実際に組み立てて鳴らす。context は再生可能な状態であること */
+function scheduleNotes(context: AudioContext, kind: FeedbackKind): void {
   try {
-    const now = context.currentTime;
+    // 現在時刻ちょうどに置くと先頭が欠ける端末があるため、少しだけ先に予約する
+    const now = context.currentTime + SCHEDULE_LEAD_SEC;
     for (const note of PATTERNS[kind]) {
       const oscillator = context.createOscillator();
       const gainNode = context.createGain();
@@ -146,6 +147,46 @@ function playSound(kind: FeedbackKind): void {
     }
   } catch {
     // 音が出せなくても進行に影響させない
+  }
+}
+
+function playSound(kind: FeedbackKind): void {
+  const context = getAudioContext();
+  if (!context) return;
+
+  if (context.state === 'running') {
+    scheduleNotes(context, kind);
+    return;
+  }
+
+  /*
+   * スマホでは AudioContext が suspended の状態で作られる。
+   * resume() は非同期なので、完了を待たずに予約すると
+   * 「再開後には予約時刻が過去になっている」＝無音になる。
+   * そのため、再開してから改めて予約する。
+   */
+  try {
+    void context
+      .resume()
+      .then(() => scheduleNotes(context, kind))
+      .catch(() => {});
+  } catch {
+    // 再開できない環境では何もしない
+  }
+}
+
+/**
+ * 音を出せる状態にしておく。
+ * 最初のタップやキー操作の時点で AudioContext を作って再開しておくことで、
+ * 正解・不正解の瞬間に「無音になる」のを防ぐ。
+ */
+export function primeAudio(): void {
+  const context = getAudioContext();
+  if (!context || context.state === 'running') return;
+  try {
+    void context.resume().catch(() => {});
+  } catch {
+    // 何もしない
   }
 }
 
