@@ -17,7 +17,7 @@ export default function HomePage() {
     <div className="space-y-5 sm:space-y-6">
       <section className="animate-fade-up text-center">
         <p className="eyebrow">Texas Hold&apos;em</p>
-        <h1 className="mt-2 text-3xl font-bold leading-tight sm:text-4xl">Poker Hands</h1>
+        <h1 className="mt-2 text-3xl font-bold leading-tight sm:text-4xl">Poker Hand</h1>
         <p className="mt-1 text-xs font-semibold tracking-[0.2em] text-slate-500">by K.M</p>
         <p className="mt-2 text-sm text-slate-400 sm:text-base">
           見るだけで終わらない。役を作って、覚える。

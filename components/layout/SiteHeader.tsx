@@ -23,14 +23,14 @@ export function SiteHeader() {
         <Link
           href="/"
           className="flex items-center gap-2 rounded-lg py-1 pr-2 transition-colors hover:text-white"
-          aria-label="Poker Hands のホームへ"
+          aria-label="Poker Hand のホームへ"
         >
           <span className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-400/15 text-emerald-300">
             <Spade className="h-4 w-4" aria-hidden="true" />
           </span>
           {/* 幅の狭い端末ではナビを優先し、ロゴマークだけを残す */}
           <span className="hidden whitespace-nowrap font-display text-sm font-bold tracking-tight text-white min-[420px]:inline sm:text-base">
-            Poker Hands
+            Poker Hand
           </span>
         </Link>
 

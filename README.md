@@ -1,6 +1,6 @@
-# Poker Hands by K.M
+# Poker Hand by K.M
 
-**Poker Hands by K.M** は、ポーカーの役をゲーム感覚で覚えられる学習アプリです。
+**Poker Hand by K.M** は、ポーカーの役をゲーム感覚で覚えられる学習アプリです。
 テキサスホールデムの役（10種類）を、**見る・選ぶ・作る・見比べる**の反復で身につけられます。
 外部APIやデータベースは使わず、ローカルだけで動作します。
 
@@ -97,4 +97,4 @@ Next.js 16 (App Router) / React 19 / TypeScript / Tailwind CSS v3 / Lucide Icons
 
 ---
 
-© 2026 Poker Hands by K.M
+© 2026 Poker Hand by K.M
