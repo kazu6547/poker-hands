@@ -1,8 +1,11 @@
 import { PlayingCard } from '@/components/cards/PlayingCard';
 import { parseCards } from '@/lib/cards';
 
-/** ホームの飾りに使う手札（ロイヤルフラッシュ） */
-const DECORATION_CARDS = parseCards('TS JS QS KS AS');
+/**
+ * ホームの飾りに使う手札（10・J・Q・K・A のストレート）。
+ * J と K を赤（ハート／ダイヤ）にし、4種類のマークをできるだけ散らしている。
+ */
+const DECORATION_CARDS = parseCards('TS JH QC KD AS');
 
 /** 扇状に広げるための角度と高さ（中央を基準に左右対称） */
 const FAN_LAYOUT = [
