@@ -6,6 +6,7 @@ import { HeroCardFan } from '@/components/home/HeroCardFan';
 import { ModeCard } from '@/components/home/ModeCard';
 import { ProgressSummary } from '@/components/home/ProgressSummary';
 import { SecondaryModeCard } from '@/components/home/SecondaryModeCard';
+import { WeakHands } from '@/components/home/WeakHands';
 
 /**
  * ホーム。
@@ -69,6 +70,9 @@ export default function HomePage() {
 
       {/* 3. 学習記録 */}
       <ProgressSummary />
+
+      {/* 3-2. 苦手な役（記録がたまってから表示される） */}
+      <WeakHands />
 
       {/* 4. 役一覧 */}
       <Link

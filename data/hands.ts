@@ -16,6 +16,7 @@ export const HANDS: HandInfo[] = [
     example: 'TS JS QS KS AS',
     howToSpot:
       'まず「マークが5枚とも同じ」かを見る。そのうえで数字が 10 から A まで並んでいれば、これがいちばん強い役。',
+    combinations: 4,
     confusions: [
       {
         handId: 'straight-flush',
@@ -37,6 +38,7 @@ export const HANDS: HandInfo[] = [
     example: '6H 7H 8H 9H TH',
     howToSpot:
       '「マークがそろっている」と「数字が階段になっている」を両方満たしているか確認する。片方だけならフラッシュかストレート。',
+    combinations: 36,
     confusions: [
       {
         handId: 'flush',
@@ -61,6 +63,7 @@ export const HANDS: HandInfo[] = [
     condition: '同じ数字のカードが4枚ある',
     example: '9S 9H 9D 9C 2S',
     howToSpot: '同じ数字を数えて「4枚」あればフォーカード。4枚は全マークがそろうので見つけやすい。',
+    combinations: 624,
     confusions: [
       {
         handId: 'full-house',
@@ -81,6 +84,7 @@ export const HANDS: HandInfo[] = [
     condition: '同じ数字が3枚＋別の同じ数字が2枚（3 + 2）',
     example: 'QS QH QD 4S 4H',
     howToSpot: '「3枚組」と「2枚組」が同時にあるかを見る。5枚がぴったり2種類の数字で埋まっていればフルハウス。',
+    combinations: 3744,
     confusions: [
       {
         handId: 'three-of-a-kind',
@@ -105,6 +109,7 @@ export const HANDS: HandInfo[] = [
     condition: '5枚すべてが同じマーク（スート）',
     example: '2D 5D 9D JD KD',
     howToSpot: 'マークだけを見て、5枚とも同じなら成立。数字は気にしなくてよい。',
+    combinations: 5108,
     confusions: [
       {
         handId: 'straight',
@@ -126,6 +131,7 @@ export const HANDS: HandInfo[] = [
     example: '5C 6D 7S 8H 9C',
     howToSpot:
       '数字を小さい順に並べて、階段になっていれば成立。A は「1」としても「いちばん上」としても使える。',
+    combinations: 10200,
     confusions: [
       {
         handId: 'flush',
@@ -150,6 +156,7 @@ export const HANDS: HandInfo[] = [
     condition: '同じ数字が3枚あり、残り2枚はペアになっていない',
     example: '7S 7H 7D KC 3D',
     howToSpot: '同じ数字が3枚あるかを数える。残り2枚がペアだとフルハウスになるので、そこも確認する。',
+    combinations: 54912,
     confusions: [
       {
         handId: 'full-house',
@@ -170,6 +177,7 @@ export const HANDS: HandInfo[] = [
     condition: '同じ数字の2枚組が2種類ある',
     example: 'JS JH 4D 4C 9S',
     howToSpot: 'ペアを探して「2組」あればツーペア。3枚組が混ざっていないかも確認する。',
+    combinations: 123552,
     confusions: [
       {
         handId: 'one-pair',
@@ -190,6 +198,7 @@ export const HANDS: HandInfo[] = [
     condition: '同じ数字の2枚組が1組だけある',
     example: 'AS AD 8H 5C 2S',
     howToSpot: '同じ数字が2枚あればワンペア。ほかにペアがないことも確認する。',
+    combinations: 1098240,
     confusions: [
       {
         handId: 'two-pair',
@@ -211,6 +220,7 @@ export const HANDS: HandInfo[] = [
     example: 'AS JD 9H 6C 3S',
     howToSpot:
       '「ペアがない」「マークがそろっていない」「連番でもない」の3つを確認できたらハイカード。',
+    combinations: 1302540,
     confusions: [
       {
         handId: 'one-pair',
@@ -242,4 +252,20 @@ export function getHand(handId: HandId): HandInfo {
 
 export function handNameJa(handId: HandId): string {
   return HANDS_BY_ID[handId].nameJa;
+}
+
+/** 52枚から5枚を選ぶ組み合わせの総数（C(52,5)） */
+export const TOTAL_FIVE_CARD_COMBINATIONS = 2_598_960;
+
+/** その役ができる確率（%）。小さい役ほど珍しい */
+export function handProbabilityPercent(handId: HandId): number {
+  return (HANDS_BY_ID[handId].combinations / TOTAL_FIVE_CARD_COMBINATIONS) * 100;
+}
+
+/** 「0.2%」「42.3%」のように、桁が小さくても読める形に整える */
+export function formatHandProbability(handId: HandId): string {
+  const percent = handProbabilityPercent(handId);
+  if (percent >= 1) return `${percent.toFixed(1)}%`;
+  if (percent >= 0.01) return `${percent.toFixed(2)}%`;
+  return `${percent.toFixed(4)}%`;
 }

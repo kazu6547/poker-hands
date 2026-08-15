@@ -9,7 +9,7 @@ import { HAND_IDS, HandId, HandStat, ModeStat, ProgressData, StatModeId } from '
  */
 
 export const PROGRESS_STORAGE_KEY = 'poker-hands-trainer:progress';
-export const PROGRESS_VERSION = 2;
+export const PROGRESS_VERSION = 3;
 
 function createEmptyHandStats(): Record<HandId, HandStat> {
   return HAND_IDS.reduce(
@@ -38,7 +38,30 @@ export function createEmptyProgress(): ProgressData {
     compare: createEmptyModeStat(),
     bestFive: createEmptyModeStat(),
     lastStudiedAt: null,
+    lastStudyDate: null,
+    studyStreakDays: 0,
+    bestStudyStreakDays: 0,
   };
+}
+
+/** YYYY-MM-DD 形式かどうか */
+function isDateKey(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+/** 端末のローカル日付を YYYY-MM-DD で返す */
+export function toDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, '0');
+  const day = `${date.getDate()}`.padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/** 2つの日付キーの差（日数）。同じ日なら 0 */
+export function dayDifference(from: string, to: string): number {
+  const start = new Date(`${from}T00:00:00`).getTime();
+  const end = new Date(`${to}T00:00:00`).getTime();
+  return Math.round((end - start) / 86_400_000);
 }
 
 function toCount(value: unknown): number {
@@ -79,6 +102,9 @@ export function normalizeProgress(raw: unknown): ProgressData {
     compare: normalizeModeStat(source.compare),
     bestFive: normalizeModeStat(source.bestFive),
     lastStudiedAt: typeof source.lastStudiedAt === 'string' ? source.lastStudiedAt : null,
+    lastStudyDate: isDateKey(source.lastStudyDate) ? source.lastStudyDate : null,
+    studyStreakDays: toCount(source.studyStreakDays),
+    bestStudyStreakDays: toCount(source.bestStudyStreakDays),
   };
 }
 
@@ -115,7 +141,35 @@ export function clearProgress(): void {
 /* 更新（純関数）                                                       */
 /* ------------------------------------------------------------------ */
 
-/** 全モード共通の集計（累計回答数・正答数・連続正解）を進める */
+/**
+ * 学習した日を記録し、連続学習日数を更新する。
+ * 同じ日に何度学習しても1日として数え、1日空くとリセットする。
+ */
+function applyStudyDay(progress: ProgressData, now: Date): Pick<
+  ProgressData,
+  'lastStudiedAt' | 'lastStudyDate' | 'studyStreakDays' | 'bestStudyStreakDays'
+> {
+  const today = toDateKey(now);
+  const previous = progress.lastStudyDate;
+
+  let studyStreakDays: number;
+  if (previous === today) {
+    studyStreakDays = Math.max(progress.studyStreakDays, 1);
+  } else if (previous && dayDifference(previous, today) === 1) {
+    studyStreakDays = progress.studyStreakDays + 1;
+  } else {
+    studyStreakDays = 1;
+  }
+
+  return {
+    lastStudiedAt: now.toISOString(),
+    lastStudyDate: today,
+    studyStreakDays,
+    bestStudyStreakDays: Math.max(progress.bestStudyStreakDays, studyStreakDays),
+  };
+}
+
+/** 全モード共通の集計（累計回答数・正答数・連続正解・連続学習日数）を進める */
 function applyAnswer(progress: ProgressData, isCorrect: boolean): ProgressData {
   const currentStreak = isCorrect ? progress.currentStreak + 1 : 0;
   return {
@@ -124,7 +178,7 @@ function applyAnswer(progress: ProgressData, isCorrect: boolean): ProgressData {
     totalCorrect: progress.totalCorrect + (isCorrect ? 1 : 0),
     currentStreak,
     bestStreak: Math.max(progress.bestStreak, currentStreak),
-    lastStudiedAt: new Date().toISOString(),
+    ...applyStudyDay(progress, new Date()),
   };
 }
 
@@ -169,7 +223,7 @@ export function applyBuildResult(progress: ProgressData, isCleared: boolean): Pr
     ...progress,
     buildAttempts: progress.buildAttempts + 1,
     buildCleared: progress.buildCleared + (isCleared ? 1 : 0),
-    lastStudiedAt: new Date().toISOString(),
+    ...applyStudyDay(progress, new Date()),
   };
 }
 
@@ -192,4 +246,34 @@ export function formatStudiedAt(iso: string | null): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
+}
+
+/**
+ * 画面に出す連続学習日数。
+ * 今日か昨日まで続いていれば「継続中」、それより前で止まっていれば 0 にする。
+ */
+export function currentStudyStreak(progress: ProgressData, now: Date = new Date()): number {
+  if (!progress.lastStudyDate) return 0;
+  const diff = dayDifference(progress.lastStudyDate, toDateKey(now));
+  return diff === 0 || diff === 1 ? progress.studyStreakDays : 0;
+}
+
+export interface WeakHand {
+  handId: HandId;
+  stat: HandStat;
+  accuracy: number;
+}
+
+/**
+ * 苦手な役（正答率が低い順）。
+ * 出題が少なすぎる役は判断できないので、既定では2回以上答えた役だけを対象にする。
+ */
+export function weakestHands(progress: ProgressData, limit = 3, minAttempts = 2): WeakHand[] {
+  return HAND_IDS.map((handId) => {
+    const stat = progress.handStats[handId] ?? { attempts: 0, correct: 0 };
+    return { handId, stat, accuracy: accuracyPercent(stat.correct, stat.attempts) };
+  })
+    .filter((entry) => entry.stat.attempts >= minAttempts && entry.accuracy < 100)
+    .sort((a, b) => a.accuracy - b.accuracy || b.stat.attempts - a.stat.attempts)
+    .slice(0, limit);
 }

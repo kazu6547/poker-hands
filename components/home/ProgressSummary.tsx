@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Award, CheckCircle2, Flame, RotateCcw } from 'lucide-react';
+import { Award, CalendarCheck, CheckCircle2, Flame, RotateCcw } from 'lucide-react';
 import { useProgress } from '@/hooks/useProgress';
-import { accuracyPercent, formatStudiedAt } from '@/lib/progress';
+import { accuracyPercent, currentStudyStreak, formatStudiedAt } from '@/lib/progress';
 import { cn } from '@/lib/cn';
 
 /**
@@ -16,6 +16,7 @@ export function ProgressSummary() {
 
   const hasRecord = isReady && progress.totalAnswers > 0;
   const accuracy = accuracyPercent(progress.totalCorrect, progress.totalAnswers);
+  const studyStreak = isReady ? currentStudyStreak(progress) : 0;
 
   const items = [
     { label: '累計回答数', value: hasRecord ? `${progress.totalAnswers}問` : '—', icon: CheckCircle2, tone: 'text-slate-100' },
@@ -33,6 +34,12 @@ export function ProgressSummary() {
               ? `最終学習：${formatStudiedAt(progress.lastStudiedAt)}`
               : 'まだ記録はありません。最初の1問に挑戦しよう。'}
           </p>
+          {studyStreak > 0 ? (
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-gold/30 bg-gold/10 px-2.5 py-1 text-xs font-bold text-gold-soft">
+              <CalendarCheck className="h-3.5 w-3.5" aria-hidden="true" />
+              {studyStreak}日連続で学習中
+            </p>
+          ) : null}
         </div>
 
         {hasRecord ? (

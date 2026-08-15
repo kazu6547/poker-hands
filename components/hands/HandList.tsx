@@ -1,12 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronDown, GitCompare, Eye } from 'lucide-react';
+import { ChevronDown, Dices, GitCompare, Eye } from 'lucide-react';
 import { CardHand } from '@/components/cards/CardHand';
-import { HANDS, HANDS_BY_ID } from '@/data/hands';
+import {
+  HANDS,
+  HANDS_BY_ID,
+  TOTAL_FIVE_CARD_COMBINATIONS,
+  formatHandProbability,
+} from '@/data/hands';
+import { useProgress } from '@/hooks/useProgress';
 import { parseCards } from '@/lib/cards';
 import { cn } from '@/lib/cn';
-import { HandId, HandInfo } from '@/lib/types';
+import { accuracyPercent } from '@/lib/progress';
+import { HandId, HandInfo, HandStat } from '@/lib/types';
 
 type Tone = 'gold' | 'iris' | 'emerald';
 
@@ -38,9 +45,11 @@ interface HandRowProps {
   hand: HandInfo;
   isOpen: boolean;
   onToggle: (handId: HandId) => void;
+  /** 「役を当てる」で貯まった、この役の成績 */
+  stat: HandStat;
 }
 
-function HandRow({ hand, isOpen, onToggle }: HandRowProps) {
+function HandRow({ hand, isOpen, onToggle, stat }: HandRowProps) {
   const tone = TONE_STYLES[toneOf(hand.strengthRank)];
   const panelId = `hand-panel-${hand.id}`;
   const buttonId = `hand-button-${hand.id}`;
@@ -73,6 +82,20 @@ function HandRow({ hand, isOpen, onToggle }: HandRowProps) {
               <span className="flex flex-wrap items-baseline gap-x-2">
                 <span className="text-base font-bold text-white sm:text-lg">{hand.nameJa}</span>
                 <span className="text-xs text-slate-500">{hand.nameEn}</span>
+                {stat.attempts > 0 ? (
+                  <span
+                    className={cn(
+                      'rounded-full px-2 py-0.5 text-[0.65rem] font-bold tabular-nums',
+                      accuracyPercent(stat.correct, stat.attempts) >= 80
+                        ? 'bg-emerald-400/15 text-emerald-200'
+                        : accuracyPercent(stat.correct, stat.attempts) >= 50
+                          ? 'bg-gold/15 text-gold-soft'
+                          : 'bg-rose-500/15 text-rose-200',
+                    )}
+                  >
+                    正答率 {accuracyPercent(stat.correct, stat.attempts)}%
+                  </span>
+                ) : null}
               </span>
               <span className="mt-1 block text-xs leading-relaxed text-slate-400">
                 {hand.shortDescription}
@@ -120,6 +143,25 @@ function HandRow({ hand, isOpen, onToggle }: HandRowProps) {
 
           <div>
             <p className="eyebrow flex items-center gap-1.5">
+              <Dices className="h-3.5 w-3.5" aria-hidden="true" />
+              出やすさ
+            </p>
+            <p className="mt-1.5 text-sm leading-relaxed text-slate-300">
+              5枚を配ったときに、この役ができる確率は
+              <span className="mx-1 font-bold text-white">{formatHandProbability(hand.id)}</span>
+              です（
+              {hand.combinations.toLocaleString('ja-JP')} 通り /{' '}
+              {TOTAL_FIVE_CARD_COMBINATIONS.toLocaleString('ja-JP')} 通り）。
+            </p>
+            {stat.attempts > 0 ? (
+              <p className="mt-1.5 text-xs text-slate-500">
+                あなたの成績：{stat.attempts}問中 {stat.correct}問 正解
+              </p>
+            ) : null}
+          </div>
+
+          <div>
+            <p className="eyebrow flex items-center gap-1.5">
               <Eye className="h-3.5 w-3.5" aria-hidden="true" />
               見分け方
             </p>
@@ -156,6 +198,7 @@ function HandRow({ hand, isOpen, onToggle }: HandRowProps) {
 /** 10役を強い順に並べた一覧（タップで詳細を開く） */
 export function HandList() {
   const [openId, setOpenId] = useState<HandId | null>(null);
+  const { progress } = useProgress();
 
   const toggle = (handId: HandId) => {
     setOpenId((current) => (current === handId ? null : handId));
@@ -164,7 +207,13 @@ export function HandList() {
   return (
     <ul className="space-y-3">
       {HANDS.map((hand) => (
-        <HandRow key={hand.id} hand={hand} isOpen={openId === hand.id} onToggle={toggle} />
+        <HandRow
+          key={hand.id}
+          hand={hand}
+          isOpen={openId === hand.id}
+          onToggle={toggle}
+          stat={progress.handStats[hand.id] ?? { attempts: 0, correct: 0 }}
+        />
       ))}
     </ul>
   );

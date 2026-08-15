@@ -8,6 +8,14 @@ const SERVICE_DESCRIPTION =
   'Poker Hand by K.Mは、ポーカーの役をゲーム感覚で覚えられる学習アプリです。テキサスホールデムの10の役を、見て・選んで・実際に作って身につけられます。';
 
 export const metadata: Metadata = {
+  /**
+   * OG画像などの絶対URLの基準。
+   * Vercel では VERCEL_URL が自動で入るため、公開URLをコードに書かなくてよい。
+   */
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ??
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'),
+  ),
   title: {
     default: `${SERVICE_NAME} | ポーカー役トレーナー`,
     // 各ページの title は「役を当てる｜Poker Hand by K.M」のように揃える

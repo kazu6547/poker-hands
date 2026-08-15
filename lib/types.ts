@@ -65,6 +65,11 @@ export interface HandInfo {
   example: string;
   /** 初心者向けの見分け方 */
   howToSpot: string;
+  /**
+   * 52枚から5枚を選ぶ 2,598,960 通りのうち、この役になる組み合わせの数。
+   * ポーカーの標準的な理論値（本アプリの判定器で全通り検証済み）。
+   */
+  combinations: number;
   /** 間違えやすい役との違い */
   confusions: HandConfusion[];
 }
@@ -148,4 +153,10 @@ export interface ProgressData {
   bestFive: ModeStat;
   /** 最後に学習した日時（ISO文字列） */
   lastStudiedAt: string | null;
+  /** 最後に学習した日（YYYY-MM-DD／端末のローカル日付。version 3 で追加） */
+  lastStudyDate: string | null;
+  /** 連続学習日数（version 3 で追加） */
+  studyStreakDays: number;
+  /** 連続学習日数の最高記録（version 3 で追加） */
+  bestStudyStreakDays: number;
 }
