@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-midnight-950 font-sans text-slate-200 antialiased;
+    /* 画面の四隅にごく淡い光を置いて、単調な黒を避ける */
+    background-image:
+      radial-gradient(60rem 40rem at 12% -10%, rgba(16, 185, 129, 0.09), transparent 60%),
+      radial-gradient(50rem 36rem at 92% 4%, rgba(139, 140, 247, 0.09), transparent 62%);
+    background-attachment: fixed;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply font-display tracking-tight text-white;
+  }
+
+  /* 色だけに頼らないよう、フォーカスは常にはっきり見せる */
+  :focus-visible {
+    @apply outline-none ring-2 ring-emerald-300 ring-offset-2 ring-offset-midnight-950;
+  }
+}
+
+@layer components {
+  /* 情報をまとめる暗い面 */
+  .panel {
+    @apply rounded-2xl border border-white/10 bg-midnight-900/70 shadow-panel backdrop-blur-sm;
+  }
+
+  /* 見出しの上に置く小さなラベル */
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.2em] text-slate-400;
+  }
+}
+
+@layer utilities {
+  /* iPhone のホームインジケーター分の余白 */
+  .pb-safe {
+    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  }
+}
+
+/* アニメーションを減らす設定を尊重する */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
