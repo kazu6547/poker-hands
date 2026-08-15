@@ -2,7 +2,9 @@
 
 import { KeyboardEvent as ReactKeyboardEvent, ReactNode, useEffect, useRef } from 'react';
 import { ArrowRight, Check, RefreshCw, X } from 'lucide-react';
+import { AchievementBadge } from './AchievementBadge';
 import { Button } from '@/components/ui/Button';
+import { AchievementNotice } from '@/lib/achievements';
 import { cn } from '@/lib/cn';
 
 export interface ResultOverlayProps {
@@ -11,6 +13,8 @@ export interface ResultOverlayProps {
   title?: string;
   /** 見出しの下に置く本文 */
   children: ReactNode;
+  /** 自己ベスト更新や節目達成の知らせ */
+  notice?: AchievementNotice;
   primaryLabel: string;
   onPrimary: () => void;
   secondaryLabel?: string;
@@ -27,6 +31,7 @@ export function ResultOverlay({
   isCorrect,
   title,
   children,
+  notice,
   primaryLabel,
   onPrimary,
   secondaryLabel,
@@ -98,6 +103,8 @@ export function ResultOverlay({
         </h2>
 
         {children}
+
+        {notice ? <AchievementBadge notice={notice} /> : null}
 
         <div className="mt-7 flex flex-col gap-3">
           <Button ref={primaryButtonRef} size="lg" fullWidth onClick={onPrimary}>

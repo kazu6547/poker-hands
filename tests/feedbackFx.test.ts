@@ -129,9 +129,9 @@ describe('効果音の再生（スマホの suspended 状態を再現）', () =>
   });
 
   it('suspended のときは、再開が終わってから未来の時刻に予約する', async () => {
-    const { playFeedback } = await import('../lib/feedbackFx');
+    const { playSound } = await import('../lib/feedbackFx');
 
-    playFeedback('correct');
+    playSound('correct');
 
     // 再開待ちの時点では、まだ1音も予約されていない
     assert.equal(resumeCalls, 1);
@@ -149,10 +149,10 @@ describe('効果音の再生（スマホの suspended 状態を再現）', () =>
   });
 
   it('サウンドOFFのときは音を予約しない', async () => {
-    const { playFeedback, FEEDBACK_SETTINGS_KEY } = await import('../lib/feedbackFx');
+    const { playSound, FEEDBACK_SETTINGS_KEY } = await import('../lib/feedbackFx');
     store.set(FEEDBACK_SETTINGS_KEY, JSON.stringify({ version: 1, sound: false, vibration: false }));
 
-    playFeedback('wrong');
+    playSound('incorrect');
     await wait(40);
 
     assert.equal(scheduled.length, 0);

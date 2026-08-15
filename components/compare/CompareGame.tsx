@@ -21,7 +21,8 @@ import {
   generateComparePuzzle,
   generateComparePuzzleSet,
 } from '@/lib/compare';
-import { playFeedback } from '@/lib/feedbackFx';
+import { AchievementNotice, resolveAnswerFeedback } from '@/lib/achievements';
+import { playSound } from '@/lib/feedbackFx';
 import { DIFFICULTY_LABELS } from '@/lib/generator';
 import { Difficulty } from '@/lib/types';
 
@@ -37,7 +38,7 @@ type Phase = 'setup' | 'playing' | 'result';
 
 /** 学習モード：VSカード（AとBの手を見比べる） */
 export function CompareGame() {
-  const { recordModeAnswer } = useProgress();
+  const { progress, recordModeAnswer } = useProgress();
   const session = useGameSession();
 
   const [phase, setPhase] = useState<Phase>('setup');
@@ -45,6 +46,7 @@ export function CompareGame() {
   const [puzzles, setPuzzles] = useState<ComparePuzzle[]>([]);
   const [selected, setSelected] = useState<CompareAnswer | null>(null);
   const [isQuitOpen, setIsQuitOpen] = useState(false);
+  const [notice, setNotice] = useState<AchievementNotice | undefined>(undefined);
   const index = session.index;
   /** 連打で同じ問題が二重集計されないようにする同期的な鍵 */
   const answerLockRef = useRef(false);
@@ -59,7 +61,9 @@ export function CompareGame() {
       answerLockRef.current = false;
       setDifficulty(level);
       setPuzzles(generateComparePuzzleSet(level, QUESTIONS_PER_SET));
+      playSound('game-start-compare');
       setSelected(null);
+      setNotice(undefined);
       setIsQuitOpen(false);
       session.reset();
       setPhase('playing');
@@ -74,16 +78,27 @@ export function CompareGame() {
       setSelected(answer);
 
       const answeredCorrectly = answer === puzzle.answer;
-      playFeedback(answeredCorrectly ? 'correct' : 'wrong');
+      const feedback = resolveAnswerFeedback({
+        isCorrect: answeredCorrectly,
+        streak: answeredCorrectly ? session.streak + 1 : 0,
+        answeredCount: session.index + 1,
+        isEndless: session.isEndless,
+        previousBestStreak: progress.bestStreak,
+        previousTotalAnswers: progress.totalAnswers,
+      });
+      playSound(feedback.event, { fallback: answeredCorrectly ? 'correct' : 'incorrect' });
+      setNotice(feedback.notice);
+
       session.recordAnswer(answeredCorrectly);
       recordModeAnswer('compare', answeredCorrectly);
     },
-    [puzzle, selected, recordModeAnswer, session],
+    [puzzle, selected, recordModeAnswer, session, progress],
   );
 
   const goNext = useCallback(() => {
     if (selected === null) return;
-    playFeedback('next');
+    playSound('next-question');
+    setNotice(undefined);
     answerLockRef.current = false;
 
     const action = session.advance();
@@ -283,6 +298,7 @@ export function CompareGame() {
         <ResultOverlay
           isCorrect={isCorrect}
           primaryLabel={isLastQuestion ? '結果を見る' : '次の問題へ'}
+          notice={notice}
           onPrimary={goNext}
         >
           <p className="mt-3 text-xl font-bold text-white sm:text-2xl">

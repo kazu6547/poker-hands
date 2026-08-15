@@ -1,9 +1,13 @@
+'use client';
+
 import Link from 'next/link';
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useRef } from 'react';
 import { Home, RefreshCw, SlidersHorizontal, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { buttonClasses } from '@/components/ui/buttonStyles';
+import { resolveSessionResultEvent } from '@/lib/achievements';
 import { cn } from '@/lib/cn';
+import { playSound } from '@/lib/feedbackFx';
 import { accuracyPercent } from '@/lib/progress';
 
 export interface SetResultProps {
@@ -19,6 +23,14 @@ export interface SetResultProps {
 /** 10問終了後の共通結果画面 */
 export function SetResult({ total, correct, children, onRetry, onChangeDifficulty }: SetResultProps) {
   const accuracy = accuracyPercent(correct, total);
+
+  // 結果画面を開いたときに1回だけ鳴らす（Strict Mode の二重実行も防ぐ）
+  const hasPlayedRef = useRef(false);
+  useEffect(() => {
+    if (hasPlayedRef.current) return;
+    hasPlayedRef.current = true;
+    playSound(resolveSessionResultEvent(accuracy));
+  }, [accuracy]);
 
   const message =
     accuracy === 100

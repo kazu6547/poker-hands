@@ -3,6 +3,7 @@
 import { CardHand } from '@/components/cards/CardHand';
 import { ResultOverlay } from '@/components/game/ResultOverlay';
 import { HANDS_BY_ID } from '@/data/hands';
+import { AchievementNotice } from '@/lib/achievements';
 import { explainEvaluation } from '@/lib/feedback';
 import { Card, HandId } from '@/lib/types';
 
@@ -14,6 +15,7 @@ export interface QuizResultOverlayProps {
   selectedId: HandId;
   cards: Card[];
   isLastQuestion: boolean;
+  notice?: AchievementNotice;
   onNext: () => void;
   onRetry: () => void;
 }
@@ -25,6 +27,7 @@ export function QuizResultOverlay({
   selectedId,
   cards,
   isLastQuestion,
+  notice,
   onNext,
   onRetry,
 }: QuizResultOverlayProps) {
@@ -35,6 +38,7 @@ export function QuizResultOverlay({
   return (
     <ResultOverlay
       isCorrect={isCorrect}
+      notice={notice}
       primaryLabel={isLastQuestion ? '結果を見る' : '次の問題へ'}
       onPrimary={onNext}
       secondaryLabel={isCorrect ? undefined : '同じ役をもう一度'}

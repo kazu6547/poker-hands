@@ -3,6 +3,7 @@
 import { Vibrate, Volume2, VolumeX } from 'lucide-react';
 import { useFeedbackSettings } from '@/hooks/useFeedbackSettings';
 import { cn } from '@/lib/cn';
+import { playSound } from '@/lib/feedbackFx';
 
 interface ToggleRowProps {
   label: string;
@@ -72,7 +73,11 @@ export function FeedbackSettingsCard() {
           label="効果音"
           description="正解・不正解のときに短い音を鳴らす"
           checked={settings.sound}
-          onChange={(value) => update({ sound: value })}
+          onChange={(value) => {
+            update({ sound: value });
+            // ONにしたときだけ、どんな音か分かるように短く試聴させる
+            if (value) playSound('sound-enabled');
+          }}
         >
           {settings.sound ? (
             <Volume2 className="h-4 w-4" aria-hidden="true" />

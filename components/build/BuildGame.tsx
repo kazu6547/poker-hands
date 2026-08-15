@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, CheckCircle2, Eraser, Lightbulb, Sparkles, XCircle } from 'lucide-react';
 import { CardBoard } from '@/components/cards/CardBoard';
+import { AchievementBadge } from '@/components/game/AchievementBadge';
 import { GameStatsBar } from '@/components/game/GameStatsBar';
 import { QuitPracticeDialog } from '@/components/game/QuitPracticeDialog';
 import { SetResult } from '@/components/game/SetResult';
@@ -12,7 +13,8 @@ import { QUESTIONS_PER_SET, useGameSession } from '@/hooks/useGameSession';
 import { useProgress } from '@/hooks/useProgress';
 import { cn } from '@/lib/cn';
 import { currentHandName, describeShortfall } from '@/lib/feedback';
-import { playFeedback } from '@/lib/feedbackFx';
+import { AchievementNotice, resolveAnswerFeedback } from '@/lib/achievements';
+import { playSound } from '@/lib/feedbackFx';
 import { generateBuildPuzzle, generateBuildPuzzleSet } from '@/lib/generator';
 import { evaluateHand } from '@/lib/evaluator';
 import { BuildPuzzle, Card } from '@/lib/types';
@@ -26,7 +28,7 @@ type CheckResult =
 
 /** 学習モードB：役を作る */
 export function BuildGame() {
-  const { recordBuildResult } = useProgress();
+  const { progress, recordBuildResult } = useProgress();
   const session = useGameSession();
 
   const [puzzles, setPuzzles] = useState<BuildPuzzle[]>([]);
@@ -36,6 +38,7 @@ export function BuildGame() {
   const [result, setResult] = useState<CheckResult>({ status: 'idle' });
   const [phase, setPhase] = useState<'playing' | 'result'>('playing');
   const [isQuitOpen, setIsQuitOpen] = useState(false);
+  const [notice, setNotice] = useState<AchievementNotice | undefined>(undefined);
   const index = session.index;
   /** 「答え合わせ」の連打で挑戦回数が二重に増えないようにする鍵（選び直すと解除） */
   const checkLockRef = useRef(false);
@@ -47,8 +50,11 @@ export function BuildGame() {
    * クライアント限定のランダム生成に対する React 公式のパターンなので、
    * 「effect 内で setState しない」ルールはこの1箇所だけ意図的に除外する。
    */
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => setPuzzles(generateBuildPuzzleSet(QUESTIONS_PER_SET)), []);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPuzzles(generateBuildPuzzleSet(QUESTIONS_PER_SET));
+    playSound('game-start-build');
+  }, []);
 
   const puzzle: BuildPuzzle | undefined = puzzles[index];
 
@@ -71,10 +77,11 @@ export function BuildGame() {
     setHintLevel(0);
     setHintedId(null);
     setResult({ status: 'idle' });
+    setNotice(undefined);
   }, []);
 
   const startNextPuzzle = useCallback(() => {
-    playFeedback('next');
+    playSound('next-question');
 
     const action = session.advance();
     if (action === 'result') {
@@ -100,6 +107,7 @@ export function BuildGame() {
     setIsQuitOpen(false);
     session.reset();
     setPuzzles(generateBuildPuzzleSet(QUESTIONS_PER_SET));
+    playSound('game-start-build');
     resetPuzzleState();
   }, [session, resetPuzzleState]);
 
@@ -107,13 +115,15 @@ export function BuildGame() {
     (card: Card) => {
       if (isCleared) return;
       checkLockRef.current = false;
-      playFeedback('select');
       setResult({ status: 'idle' });
       setSelectedIds((current) => {
         if (current.includes(card.id)) {
+          playSound('card-deselect');
           return current.filter((id) => id !== card.id);
         }
+        // 上限に達しているタップは何も起きないので、音も鳴らさない
         if (current.length >= REQUIRED_CARDS) return current;
+        playSound('card-select');
         return [...current, card.id];
       });
     },
@@ -135,15 +145,27 @@ export function BuildGame() {
     const evaluation = evaluateHand(selectedCards);
     const succeeded = evaluation.handId === puzzle.targetHandId;
 
-    playFeedback(succeeded ? 'correct' : 'wrong');
     recordBuildResult(succeeded);
 
     if (succeeded) {
       // 一発で正解できたときだけ成績に加算する（やり直しは何度でもOK）
-      session.recordAnswer(!missedRef.current);
+      const firstTry = !missedRef.current;
+      const feedback = resolveAnswerFeedback({
+        isCorrect: firstTry,
+        streak: firstTry ? session.streak + 1 : 0,
+        answeredCount: session.index + 1,
+        isEndless: session.isEndless,
+        previousBestStreak: progress.bestStreak,
+        previousTotalAnswers: progress.totalAnswers,
+      });
+      playSound(firstTry ? feedback.event : 'correct', { fallback: 'correct' });
+      setNotice(firstTry ? feedback.notice : undefined);
+      session.recordAnswer(firstTry);
       setResult({ status: 'correct' });
       return;
     }
+
+    playSound('incorrect');
 
     missedRef.current = true;
     setResult({
@@ -151,7 +173,7 @@ export function BuildGame() {
       madeHandName: currentHandName(selectedCards),
       advice: describeShortfall(puzzle.targetHandId, selectedCards),
     });
-  }, [puzzle, selectedCards, isCleared, recordBuildResult, session]);
+  }, [puzzle, selectedCards, isCleared, recordBuildResult, session, progress]);
 
   /** ヒント：1回目は役の条件、2回目は正解カードを1枚うっすら光らせる */
   const useHint = useCallback(() => {
@@ -286,6 +308,7 @@ export function BuildGame() {
               <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" aria-hidden="true" />
               <span>{targetHand.howToSpot}</span>
             </p>
+            {notice ? <AchievementBadge notice={notice} /> : null}
           </div>
         ) : null}
 

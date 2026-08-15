@@ -1,3 +1,11 @@
+import {
+  IMPORTANT_PRIORITY,
+  IMPORTANT_QUIET_MS,
+  SOUND_DEFINITIONS,
+  SoundEvent,
+  SoundNote,
+} from './soundEvents';
+
 /**
  * 効果音と振動のフィードバック。
  *
@@ -12,8 +20,6 @@ export interface FeedbackSettings {
   sound: boolean;
   vibration: boolean;
 }
-
-export type FeedbackKind = 'correct' | 'wrong' | 'select' | 'next';
 
 export const FEEDBACK_SETTINGS_KEY = 'poker-hands-trainer:settings';
 export const FEEDBACK_SETTINGS_EVENT = 'pht:feedback-settings';
@@ -67,38 +73,6 @@ export function canVibrate(): boolean {
 /* 音の生成                                                            */
 /* ------------------------------------------------------------------ */
 
-interface Note {
-  frequency: number;
-  /** 再生開始の相対時間（秒） */
-  start: number;
-  duration: number;
-  gain?: number;
-  type?: OscillatorType;
-}
-
-/** 上品でポップに聞こえる短い音。音量は控えめに固定する */
-const PATTERNS: Record<FeedbackKind, Note[]> = {
-  // 明るい上昇チャイム（ソ → ド）
-  correct: [
-    { frequency: 784, start: 0, duration: 0.12 },
-    { frequency: 1046.5, start: 0.085, duration: 0.2 },
-  ],
-  // 責めない柔らかい下降音
-  wrong: [
-    { frequency: 330, start: 0, duration: 0.14, type: 'triangle', gain: 0.05 },
-    { frequency: 247, start: 0.1, duration: 0.2, type: 'triangle', gain: 0.045 },
-  ],
-  select: [{ frequency: 880, start: 0, duration: 0.045, gain: 0.025 }],
-  next: [{ frequency: 587.3, start: 0, duration: 0.07, gain: 0.03 }],
-};
-
-const VIBRATION_PATTERNS: Record<FeedbackKind, number[] | null> = {
-  correct: [14, 45, 14],
-  wrong: [28],
-  select: null,
-  next: null,
-};
-
 type AudioContextConstructor = new () => AudioContext;
 
 /** 予約を少しだけ先に置くための余裕（秒） */
@@ -124,15 +98,15 @@ function getAudioContext(): AudioContext | null {
 }
 
 /** 音を実際に組み立てて鳴らす。context は再生可能な状態であること */
-function scheduleNotes(context: AudioContext, kind: FeedbackKind): void {
+function scheduleNotes(context: AudioContext, notes: readonly SoundNote[], gain: number): void {
   try {
     // 現在時刻ちょうどに置くと先頭が欠ける端末があるため、少しだけ先に予約する
     const now = context.currentTime + SCHEDULE_LEAD_SEC;
-    for (const note of PATTERNS[kind]) {
+    for (const note of notes) {
       const oscillator = context.createOscillator();
       const gainNode = context.createGain();
       const startAt = now + note.start;
-      const peak = note.gain ?? 0.06;
+      const peak = Math.max(gain * (note.level ?? 1), 0.001);
 
       oscillator.type = note.type ?? 'sine';
       oscillator.frequency.setValueAtTime(note.frequency, startAt);
@@ -150,12 +124,24 @@ function scheduleNotes(context: AudioContext, kind: FeedbackKind): void {
   }
 }
 
-function playSound(kind: FeedbackKind): void {
+/** 動きを控えたい設定のときは、音の刺激も少し抑える */
+function volumeScale(): number {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 1;
+  try {
+    return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.7 : 1;
+  } catch {
+    return 1;
+  }
+}
+
+function playNotes(notes: readonly SoundNote[], gain: number): void {
   const context = getAudioContext();
   if (!context) return;
 
+  const scaledGain = gain * volumeScale();
+
   if (context.state === 'running') {
-    scheduleNotes(context, kind);
+    scheduleNotes(context, notes, scaledGain);
     return;
   }
 
@@ -168,7 +154,7 @@ function playSound(kind: FeedbackKind): void {
   try {
     void context
       .resume()
-      .then(() => scheduleNotes(context, kind))
+      .then(() => scheduleNotes(context, notes, scaledGain))
       .catch(() => {});
   } catch {
     // 再開できない環境では何もしない
@@ -190,8 +176,7 @@ export function primeAudio(): void {
   }
 }
 
-function vibrate(kind: FeedbackKind): void {
-  const pattern = VIBRATION_PATTERNS[kind];
+function vibrate(pattern: readonly number[] | undefined): void {
   if (!pattern || !canVibrate()) return;
 
   // ユーザー操作前の呼び出しはブラウザにブロックされるため、その場合は何もしない
@@ -199,24 +184,55 @@ function vibrate(kind: FeedbackKind): void {
   if (activation && !activation.hasBeenActive) return;
 
   try {
-    navigator.vibrate(pattern);
+    navigator.vibrate([...pattern]);
   } catch {
     // 非対応・拒否されても何もしない
   }
 }
 
-/** 同じ結果表示で二重に鳴らさないためのガード */
-const lastPlayedAt = new Map<FeedbackKind, number>();
-const REPEAT_GUARD_MS = 250;
+/** 同じ音の連打と、重要な音への被りを防ぐための記録 */
+const lastPlayedAt = new Map<SoundEvent, number>();
+let lastImportantAt = 0;
 
-export function playFeedback(kind: FeedbackKind): void {
-  if (typeof window === 'undefined') return;
+export interface PlaySoundOptions {
+  /**
+   * 本命の音がクールダウン中だったときに代わりに鳴らす音。
+   * 達成音が連続したときでも、回答のフィードバックが無音にならないようにする。
+   */
+  fallback?: SoundEvent;
+}
+
+/**
+ * 効果音（と対応端末では振動）を鳴らす。
+ * - サウンドOFFなら何も鳴らさない
+ * - 同じ音はクールダウン中は鳴らさない（必要なら fallback で代替する）
+ * - 重要な音の直後は、カード操作のような軽い音を鳴らさない
+ *
+ * @returns 実際に鳴らしたか（サウンドOFFでも「鳴らす判断をした」なら true）
+ */
+export function playSound(event: SoundEvent, options: PlaySoundOptions = {}): boolean {
+  if (typeof window === 'undefined') return false;
+
+  const definition = SOUND_DEFINITIONS[event];
+  if (!definition) return false;
 
   const now = Date.now();
-  if (now - (lastPlayedAt.get(kind) ?? 0) < REPEAT_GUARD_MS) return;
-  lastPlayedAt.set(kind, now);
+  if (now - (lastPlayedAt.get(event) ?? 0) < definition.cooldownMs) {
+    // 連続で同じ達成音が来たときは、通常の正誤音に控えめに置き換える
+    if (options.fallback && options.fallback !== event) {
+      return playSound(options.fallback);
+    }
+    return false;
+  }
+
+  const isImportant = definition.priority >= IMPORTANT_PRIORITY;
+  if (!isImportant && now - lastImportantAt < IMPORTANT_QUIET_MS) return false;
+
+  lastPlayedAt.set(event, now);
+  if (isImportant) lastImportantAt = now;
 
   const settings = loadFeedbackSettings();
-  if (settings.sound) playSound(kind);
-  if (settings.vibration) vibrate(kind);
+  if (settings.sound) playNotes(definition.notes, definition.gain);
+  if (settings.vibration) vibrate(definition.vibration);
+  return true;
 }

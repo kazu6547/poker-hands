@@ -11,7 +11,8 @@ import { GameStatsBar } from '@/components/game/GameStatsBar';
 import { QuitPracticeDialog } from '@/components/game/QuitPracticeDialog';
 import { QUESTIONS_PER_SET, useGameSession } from '@/hooks/useGameSession';
 import { useProgress } from '@/hooks/useProgress';
-import { playFeedback } from '@/lib/feedbackFx';
+import { AchievementNotice, resolveAnswerFeedback } from '@/lib/achievements';
+import { playSound } from '@/lib/feedbackFx';
 import { DIFFICULTY_LABELS, generateQuizQuestion, generateQuizSet } from '@/lib/generator';
 import { Difficulty, HandId, QuizQuestion } from '@/lib/types';
 
@@ -19,7 +20,7 @@ type Phase = 'setup' | 'playing' | 'result';
 
 /** 学習モードA：役を当てる */
 export function QuizGame() {
-  const { recordQuizAnswer } = useProgress();
+  const { progress, recordQuizAnswer } = useProgress();
   const session = useGameSession();
 
   const [phase, setPhase] = useState<Phase>('setup');
@@ -30,6 +31,7 @@ export function QuizGame() {
   const [isRetryQuestion, setIsRetryQuestion] = useState(false);
   const [missedHandIds, setMissedHandIds] = useState<HandId[]>([]);
   const [isQuitOpen, setIsQuitOpen] = useState(false);
+  const [notice, setNotice] = useState<AchievementNotice | undefined>(undefined);
   const index = session.index;
   /**
    * 連打対策。state の更新は次の描画までに反映されないため、
@@ -47,7 +49,9 @@ export function QuizGame() {
       answerLockRef.current = false;
       setDifficulty(level);
       setQuestions(generateQuizSet(level, QUESTIONS_PER_SET));
+      playSound('game-start-quiz');
       setSelected(null);
+      setNotice(undefined);
       setIsRetryQuestion(false);
       setMissedHandIds([]);
       setIsQuitOpen(false);
@@ -64,9 +68,24 @@ export function QuizGame() {
       setSelected(handId);
 
       const answeredCorrectly = handId === question.answerId;
-      playFeedback(answeredCorrectly ? 'correct' : 'wrong');
+
       // 復習問題は成績に含めない（プレッシャーを与えないため）
-      if (isRetryQuestion) return;
+      if (isRetryQuestion) {
+        playSound(answeredCorrectly ? 'correct' : 'incorrect');
+        return;
+      }
+
+      // 連続正解・節目・自己ベストのうち、いちばん重要なものだけ鳴らす
+      const feedback = resolveAnswerFeedback({
+        isCorrect: answeredCorrectly,
+        streak: answeredCorrectly ? session.streak + 1 : 0,
+        answeredCount: session.index + 1,
+        isEndless: session.isEndless,
+        previousBestStreak: progress.bestStreak,
+        previousTotalAnswers: progress.totalAnswers,
+      });
+      playSound(feedback.event, { fallback: answeredCorrectly ? 'correct' : 'incorrect' });
+      setNotice(feedback.notice);
 
       session.recordAnswer(answeredCorrectly);
       if (!answeredCorrectly) {
@@ -74,12 +93,13 @@ export function QuizGame() {
       }
       recordQuizAnswer(question.answerId, answeredCorrectly);
     },
-    [question, selected, isRetryQuestion, recordQuizAnswer, session],
+    [question, selected, isRetryQuestion, recordQuizAnswer, session, progress],
   );
 
   const goNext = useCallback(() => {
     if (selected === null) return;
-    playFeedback('next');
+    playSound('next-question');
+    setNotice(undefined);
     answerLockRef.current = false;
 
     const action = session.advance();
@@ -261,6 +281,7 @@ export function QuizGame() {
           selectedId={selected}
           cards={question.cards}
           isLastQuestion={isLastQuestion}
+          notice={notice}
           onNext={goNext}
           onRetry={retrySameHand}
         />

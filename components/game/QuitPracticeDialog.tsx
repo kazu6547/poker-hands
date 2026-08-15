@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { Home, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { buttonClasses } from '@/components/ui/buttonStyles';
+import { resolveFinishEvent } from '@/lib/achievements';
+import { playSound } from '@/lib/feedbackFx';
 import { accuracyPercent } from '@/lib/progress';
 
 export interface QuitPracticeDialogProps {
@@ -122,6 +124,11 @@ export function QuitPracticeDialog({
           </Button>
           <Link
             href="/"
+            onClick={() => {
+              // 練習を終える瞬間だけ、回答数に応じた振り返り音を鳴らす
+              const event = resolveFinishEvent(answered);
+              if (event) playSound(event);
+            }}
             className={buttonClasses({ variant: 'secondary', size: 'lg', fullWidth: true })}
           >
             <Home className="h-4 w-4" aria-hidden="true" />

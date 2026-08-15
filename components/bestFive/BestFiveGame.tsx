@@ -21,7 +21,8 @@ import {
 } from '@/lib/bestFive';
 import { evaluateHand } from '@/lib/evaluator';
 import { explainEvaluation } from '@/lib/feedback';
-import { playFeedback } from '@/lib/feedbackFx';
+import { AchievementNotice, resolveAnswerFeedback } from '@/lib/achievements';
+import { playSound } from '@/lib/feedbackFx';
 import { DIFFICULTY_LABELS } from '@/lib/generator';
 import { Card, Difficulty } from '@/lib/types';
 
@@ -37,7 +38,7 @@ type Phase = 'setup' | 'playing' | 'result';
 
 /** 学習モード：最強の5枚 */
 export function BestFiveGame() {
-  const { recordModeAnswer } = useProgress();
+  const { progress, recordModeAnswer } = useProgress();
   const session = useGameSession();
 
   const [phase, setPhase] = useState<Phase>('setup');
@@ -46,6 +47,7 @@ export function BestFiveGame() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isAnswered, setIsAnswered] = useState(false);
   const [isQuitOpen, setIsQuitOpen] = useState(false);
+  const [notice, setNotice] = useState<AchievementNotice | undefined>(undefined);
   /** 連打で同じ問題が二重集計されないようにする同期的な鍵 */
   const answerLockRef = useRef(false);
 
@@ -65,9 +67,11 @@ export function BestFiveGame() {
       answerLockRef.current = false;
       setDifficulty(level);
       setPuzzle(generateBestFivePuzzle(level));
+      playSound('game-start-best-five');
       setSelectedIds([]);
       setIsAnswered(false);
       setIsQuitOpen(false);
+      setNotice(undefined);
       session.reset();
       setPhase('playing');
     },
@@ -77,10 +81,14 @@ export function BestFiveGame() {
   const toggleCard = useCallback(
     (card: Card) => {
       if (isAnswered) return;
-      playFeedback('select');
       setSelectedIds((current) => {
-        if (current.includes(card.id)) return current.filter((id) => id !== card.id);
+        if (current.includes(card.id)) {
+          playSound('card-deselect');
+          return current.filter((id) => id !== card.id);
+        }
+        // 上限に達しているタップは何も起きないので、音も鳴らさない
         if (current.length >= REQUIRED_CARDS) return current;
+        playSound('card-select');
         return [...current, card.id];
       });
     },
@@ -99,14 +107,26 @@ export function BestFiveGame() {
 
     const answeredCorrectly = isBestFiveSelection(selectedCards, puzzle.best);
     setIsAnswered(true);
-    playFeedback(answeredCorrectly ? 'correct' : 'wrong');
+
+    const feedback = resolveAnswerFeedback({
+      isCorrect: answeredCorrectly,
+      streak: answeredCorrectly ? session.streak + 1 : 0,
+      answeredCount: session.index + 1,
+      isEndless: session.isEndless,
+      previousBestStreak: progress.bestStreak,
+      previousTotalAnswers: progress.totalAnswers,
+    });
+    playSound(feedback.event, { fallback: answeredCorrectly ? 'correct' : 'incorrect' });
+    setNotice(feedback.notice);
+
     session.recordAnswer(answeredCorrectly);
     recordModeAnswer('bestFive', answeredCorrectly);
-  }, [puzzle, isAnswered, selectedCards, recordModeAnswer, session]);
+  }, [puzzle, isAnswered, selectedCards, recordModeAnswer, session, progress]);
 
   const goNext = useCallback(() => {
     if (!isAnswered) return;
-    playFeedback('next');
+    playSound('next-question');
+    setNotice(undefined);
     answerLockRef.current = false;
 
     const action = session.advance();
@@ -296,6 +316,7 @@ export function BestFiveGame() {
       {isAnswered ? (
         <ResultOverlay
           isCorrect={isCorrect}
+          notice={notice}
           primaryLabel={isLastQuestion ? '結果を見る' : '次の問題へ'}
           onPrimary={goNext}
         >
