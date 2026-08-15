@@ -7,8 +7,10 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "NEXT_DIST_DIR=.next-build next build",
-    "start": "NEXT_DIST_DIR=.next-build next start",
+    "build": "next build",
+    "start": "next start",
+    "build:local": "NEXT_DIST_DIR=.next-build next build",
+    "start:local": "NEXT_DIST_DIR=.next-build next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test tests/*.test.ts"

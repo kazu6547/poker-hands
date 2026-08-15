@@ -28,17 +28,24 @@ http://localhost:3000 を開くとホーム画面が表示されます。
 ```bash
 npm run lint       # ESLint 9（フラット設定 / next/core-web-vitals 相当）
 npm run typecheck  # 型チェックのみ
-npm run build      # 本番ビルド（出力先は .next-build）
+npm run build      # 本番ビルド（標準の .next へ出力）
 npm start          # 本番サーバー起動（build のあと）
+npm test           # ロジックの自動テスト
 ```
 
-### ビルド出力先を分けている理由
+## デプロイ（Vercel）
 
-`next dev` と `next build` は既定でどちらも `.next` を使うため、**開発サーバーを起動したまま
-`npm run build` を実行すると `.next` が本番用の出力で上書きされ、開発サーバーが配信していた
-CSS / JS が 404 になってデザインが消えます**。
-これを避けるため、`next.config.mjs` の `distDir` を環境変数で切り替え、
-`npm run build` / `npm start` は `.next-build` を使うようにしています（dev は `.next`）。
+`npm run build` は標準の `.next` に出力するため、Vercel では**リポジトリを Import するだけ**で公開できます。
+Output Directory の Override は不要（自動検出のままでOK）、環境変数の設定も不要です。
+
+Next.js 16 では開発サーバーの出力が `.next/dev/` に分離されているため、
+`next dev` を起動したまま `npm run build` を実行しても開発中の画面は壊れません。
+それでも出力先を完全に分けたい場合のみ、任意で次のスクリプトを使えます（`.next-build` へ出力）。
+
+```bash
+npm run build:local
+npm run start:local
+```
 
 ## ディレクトリ構成
 

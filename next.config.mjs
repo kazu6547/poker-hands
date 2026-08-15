@@ -2,10 +2,13 @@
 const nextConfig = {
   reactStrictMode: true,
   /**
-   * 開発サーバー（next dev）を起動したまま next build を実行すると、
-   * 共有の .next ディレクトリが本番用の出力で上書きされ、
-   * dev 用の CSS / JS が 404 になってスタイルが消える。
-   * ビルドの出力先を分けて、この衝突を防ぐ。
+   * 出力先は既定の `.next`。
+   * Vercel はこのディレクトリを自動検出するため、環境変数を設定しない限り標準の場所に出力される。
+   *
+   * NEXT_DIST_DIR は、ローカルで出力先を分けたいときだけ使う任意の仕組み
+   * （`npm run build:local` / `npm run start:local`）。
+   * Next.js 16 では開発サーバーの出力が `.next/dev/` に分離されたため、
+   * dev を起動したまま `npm run build` しても開発中の画面は壊れない。
    */
   distDir: process.env.NEXT_DIST_DIR ?? '.next',
 };
