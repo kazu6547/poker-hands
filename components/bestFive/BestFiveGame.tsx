@@ -5,11 +5,13 @@ import { CheckCircle2, Eraser, Layers, SlidersHorizontal } from 'lucide-react';
 import { PlayingCard } from '@/components/cards/PlayingCard';
 import { CardHand } from '@/components/cards/CardHand';
 import { GameStatsBar } from '@/components/game/GameStatsBar';
+import { QuitPracticeDialog } from '@/components/game/QuitPracticeDialog';
 import { ResultOverlay } from '@/components/game/ResultOverlay';
 import { SetResult } from '@/components/game/SetResult';
 import { DifficultyPicker } from '@/components/quiz/DifficultyPicker';
 import { Button } from '@/components/ui/Button';
 import { HANDS_BY_ID } from '@/data/hands';
+import { QUESTIONS_PER_SET, useGameSession } from '@/hooks/useGameSession';
 import { useProgress } from '@/hooks/useProgress';
 import {
   BestFivePuzzle,
@@ -23,7 +25,6 @@ import { playFeedback } from '@/lib/feedbackFx';
 import { DIFFICULTY_LABELS } from '@/lib/generator';
 import { Card, Difficulty } from '@/lib/types';
 
-const QUESTIONS_PER_SET = 10;
 const REQUIRED_CARDS = 5;
 
 const LEVEL_DESCRIPTIONS: Record<Difficulty, string> = {
@@ -37,15 +38,14 @@ type Phase = 'setup' | 'playing' | 'result';
 /** 学習モード：最強の5枚を選ぶ */
 export function BestFiveGame() {
   const { recordModeAnswer } = useProgress();
+  const session = useGameSession();
 
   const [phase, setPhase] = useState<Phase>('setup');
   const [difficulty, setDifficulty] = useState<Difficulty>('beginner');
   const [puzzle, setPuzzle] = useState<BestFivePuzzle | null>(null);
-  const [index, setIndex] = useState(0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isAnswered, setIsAnswered] = useState(false);
-  const [correctCount, setCorrectCount] = useState(0);
-  const [streak, setStreak] = useState(0);
+  const [isQuitOpen, setIsQuitOpen] = useState(false);
   /** 連打で同じ問題が二重集計されないようにする同期的な鍵 */
   const answerLockRef = useRef(false);
 
@@ -58,19 +58,21 @@ export function BestFiveGame() {
 
   const isReadyToCheck = selectedIds.length === REQUIRED_CARDS;
   const isCorrect = isAnswered && !!puzzle && isBestFiveSelection(selectedCards, puzzle.best);
-  const isLastQuestion = index >= QUESTIONS_PER_SET - 1;
+  const isLastQuestion = session.isLastQuestion;
 
-  const start = useCallback((level: Difficulty) => {
-    answerLockRef.current = false;
-    setDifficulty(level);
-    setPuzzle(generateBestFivePuzzle(level));
-    setIndex(0);
-    setSelectedIds([]);
-    setIsAnswered(false);
-    setCorrectCount(0);
-    setStreak(0);
-    setPhase('playing');
-  }, []);
+  const start = useCallback(
+    (level: Difficulty) => {
+      answerLockRef.current = false;
+      setDifficulty(level);
+      setPuzzle(generateBestFivePuzzle(level));
+      setSelectedIds([]);
+      setIsAnswered(false);
+      setIsQuitOpen(false);
+      session.reset();
+      setPhase('playing');
+    },
+    [session],
+  );
 
   const toggleCard = useCallback(
     (card: Card) => {
@@ -98,24 +100,25 @@ export function BestFiveGame() {
     const answeredCorrectly = isBestFiveSelection(selectedCards, puzzle.best);
     setIsAnswered(true);
     playFeedback(answeredCorrectly ? 'correct' : 'wrong');
-    setCorrectCount((current) => current + (answeredCorrectly ? 1 : 0));
-    setStreak((current) => (answeredCorrectly ? current + 1 : 0));
+    session.recordAnswer(answeredCorrectly);
     recordModeAnswer('bestFive', answeredCorrectly);
-  }, [puzzle, isAnswered, selectedCards, recordModeAnswer]);
+  }, [puzzle, isAnswered, selectedCards, recordModeAnswer, session]);
 
   const goNext = useCallback(() => {
     if (!isAnswered) return;
     playFeedback('next');
     answerLockRef.current = false;
-    if (isLastQuestion) {
+
+    const action = session.advance();
+    if (action === 'result') {
       setPhase('result');
       return;
     }
-    setIndex((current) => current + 1);
+    // 'next' も 'restart' も、次の7枚を新しく配る点は同じ
     setPuzzle(generateBestFivePuzzle(difficulty));
     setSelectedIds([]);
     setIsAnswered(false);
-  }, [isAnswered, isLastQuestion, difficulty]);
+  }, [isAnswered, session, difficulty]);
 
   /* キーボード操作：Enter で答え合わせ／次の問題へ */
   useEffect(() => {
@@ -156,7 +159,7 @@ export function BestFiveGame() {
     return (
       <SetResult
         total={QUESTIONS_PER_SET}
-        correct={correctCount}
+        correct={session.correctCount}
         onRetry={() => start(difficulty)}
         onChangeDifficulty={() => setPhase('setup')}
       />
@@ -204,11 +207,16 @@ export function BestFiveGame() {
         </div>
 
         <GameStatsBar
-          current={index + 1}
-          total={QUESTIONS_PER_SET}
-          correct={correctCount}
-          streak={streak}
+          current={session.questionNumber}
+          total={session.total}
+          correct={session.correctCount}
+          streak={session.streak}
           isAnswered={isAnswered}
+          isEndless={session.isEndless}
+          onToggleEndless={session.setEndless}
+          toggleDisabled={isAnswered}
+          onQuit={() => setIsQuitOpen(true)}
+          notice={session.notice}
         />
       </header>
 
@@ -274,6 +282,16 @@ export function BestFiveGame() {
           答え合わせ
         </Button>
       </div>
+
+      {isQuitOpen ? (
+        <QuitPracticeDialog
+          modeName="最強の5枚を選ぶ"
+          answered={session.index + (isAnswered ? 1 : 0)}
+          correct={session.correctCount}
+          streak={session.streak}
+          onContinue={() => setIsQuitOpen(false)}
+        />
+      ) : null}
 
       {isAnswered ? (
         <ResultOverlay

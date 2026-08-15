@@ -4,10 +4,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
 import { CardHand } from '@/components/cards/CardHand';
 import { GameStatsBar } from '@/components/game/GameStatsBar';
+import { QuitPracticeDialog } from '@/components/game/QuitPracticeDialog';
 import { ResultOverlay } from '@/components/game/ResultOverlay';
 import { SetResult } from '@/components/game/SetResult';
 import { DifficultyPicker } from '@/components/quiz/DifficultyPicker';
 import { HANDS_BY_ID } from '@/data/hands';
+import { QUESTIONS_PER_SET, useGameSession } from '@/hooks/useGameSession';
 import { useProgress } from '@/hooks/useProgress';
 import { cn } from '@/lib/cn';
 import {
@@ -16,13 +18,13 @@ import {
   ComparePuzzle,
   compareResultHeadline,
   describeComparison,
+  generateComparePuzzle,
   generateComparePuzzleSet,
 } from '@/lib/compare';
 import { playFeedback } from '@/lib/feedbackFx';
 import { DIFFICULTY_LABELS } from '@/lib/generator';
 import { Difficulty } from '@/lib/types';
 
-const QUESTIONS_PER_SET = 10;
 const ANSWER_ORDER: CompareAnswer[] = ['A', 'B', 'tie'];
 
 const LEVEL_DESCRIPTIONS: Record<Difficulty, string> = {
@@ -36,32 +38,34 @@ type Phase = 'setup' | 'playing' | 'result';
 /** 学習モード：強さ比較 */
 export function CompareGame() {
   const { recordModeAnswer } = useProgress();
+  const session = useGameSession();
 
   const [phase, setPhase] = useState<Phase>('setup');
   const [difficulty, setDifficulty] = useState<Difficulty>('beginner');
   const [puzzles, setPuzzles] = useState<ComparePuzzle[]>([]);
-  const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<CompareAnswer | null>(null);
-  const [correctCount, setCorrectCount] = useState(0);
-  const [streak, setStreak] = useState(0);
+  const [isQuitOpen, setIsQuitOpen] = useState(false);
+  const index = session.index;
   /** 連打で同じ問題が二重集計されないようにする同期的な鍵 */
   const answerLockRef = useRef(false);
 
   const puzzle: ComparePuzzle | undefined = puzzles[index];
   const isAnswered = selected !== null;
   const isCorrect = isAnswered && !!puzzle && selected === puzzle.answer;
-  const isLastQuestion = index >= QUESTIONS_PER_SET - 1;
+  const isLastQuestion = session.isLastQuestion;
 
-  const start = useCallback((level: Difficulty) => {
-    answerLockRef.current = false;
-    setDifficulty(level);
-    setPuzzles(generateComparePuzzleSet(level, QUESTIONS_PER_SET));
-    setIndex(0);
-    setSelected(null);
-    setCorrectCount(0);
-    setStreak(0);
-    setPhase('playing');
-  }, []);
+  const start = useCallback(
+    (level: Difficulty) => {
+      answerLockRef.current = false;
+      setDifficulty(level);
+      setPuzzles(generateComparePuzzleSet(level, QUESTIONS_PER_SET));
+      setSelected(null);
+      setIsQuitOpen(false);
+      session.reset();
+      setPhase('playing');
+    },
+    [session],
+  );
 
   const handleAnswer = useCallback(
     (answer: CompareAnswer) => {
@@ -71,24 +75,34 @@ export function CompareGame() {
 
       const answeredCorrectly = answer === puzzle.answer;
       playFeedback(answeredCorrectly ? 'correct' : 'wrong');
-      setCorrectCount((current) => current + (answeredCorrectly ? 1 : 0));
-      setStreak((current) => (answeredCorrectly ? current + 1 : 0));
+      session.recordAnswer(answeredCorrectly);
       recordModeAnswer('compare', answeredCorrectly);
     },
-    [puzzle, selected, recordModeAnswer],
+    [puzzle, selected, recordModeAnswer, session],
   );
 
   const goNext = useCallback(() => {
     if (selected === null) return;
     playFeedback('next');
     answerLockRef.current = false;
-    if (isLastQuestion) {
+
+    const action = session.advance();
+    if (action === 'result') {
       setPhase('result');
       return;
     }
-    setIndex((current) => current + 1);
+    if (action === 'restart') {
+      setPuzzles(generateComparePuzzleSet(difficulty, QUESTIONS_PER_SET));
+    } else {
+      // 無限モードでは足りなくなった分を追加で生成する
+      setPuzzles((current) =>
+        session.index + 1 < current.length
+          ? current
+          : [...current, generateComparePuzzle(difficulty)],
+      );
+    }
     setSelected(null);
-  }, [selected, isLastQuestion]);
+  }, [selected, session, difficulty]);
 
   /* キーボード操作：1 / 2 / 3 で回答、Enter で次へ */
   useEffect(() => {
@@ -134,7 +148,7 @@ export function CompareGame() {
     return (
       <SetResult
         total={QUESTIONS_PER_SET}
-        correct={correctCount}
+        correct={session.correctCount}
         onRetry={() => start(difficulty)}
         onChangeDifficulty={() => setPhase('setup')}
       />
@@ -165,11 +179,16 @@ export function CompareGame() {
         </div>
 
         <GameStatsBar
-          current={index + 1}
-          total={QUESTIONS_PER_SET}
-          correct={correctCount}
-          streak={streak}
+          current={session.questionNumber}
+          total={session.total}
+          correct={session.correctCount}
+          streak={session.streak}
           isAnswered={isAnswered}
+          isEndless={session.isEndless}
+          onToggleEndless={session.setEndless}
+          toggleDisabled={isAnswered}
+          onQuit={() => setIsQuitOpen(true)}
+          notice={session.notice}
         />
       </header>
 
@@ -249,6 +268,16 @@ export function CompareGame() {
           );
         })}
       </section>
+
+      {isQuitOpen ? (
+        <QuitPracticeDialog
+          modeName="強さ比較"
+          answered={session.index + (isAnswered ? 1 : 0)}
+          correct={session.correctCount}
+          streak={session.streak}
+          onContinue={() => setIsQuitOpen(false)}
+        />
+      ) : null}
 
       {isAnswered && selected ? (
         <ResultOverlay

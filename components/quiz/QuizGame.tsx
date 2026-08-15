@@ -8,29 +8,29 @@ import { QuizResult } from './QuizResult';
 import { QuizResultOverlay } from './QuizResultOverlay';
 import { CardHand } from '@/components/cards/CardHand';
 import { GameStatsBar } from '@/components/game/GameStatsBar';
+import { QuitPracticeDialog } from '@/components/game/QuitPracticeDialog';
+import { QUESTIONS_PER_SET, useGameSession } from '@/hooks/useGameSession';
 import { useProgress } from '@/hooks/useProgress';
 import { playFeedback } from '@/lib/feedbackFx';
 import { DIFFICULTY_LABELS, generateQuizQuestion, generateQuizSet } from '@/lib/generator';
 import { Difficulty, HandId, QuizQuestion } from '@/lib/types';
-
-const QUESTIONS_PER_SET = 10;
 
 type Phase = 'setup' | 'playing' | 'result';
 
 /** 学習モードA：役を当てる */
 export function QuizGame() {
   const { recordQuizAnswer } = useProgress();
+  const session = useGameSession();
 
   const [phase, setPhase] = useState<Phase>('setup');
   const [difficulty, setDifficulty] = useState<Difficulty>('beginner');
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
-  const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<HandId | null>(null);
   /** 復習用に差し替えた問題（成績には記録しない） */
   const [isRetryQuestion, setIsRetryQuestion] = useState(false);
-  const [correctCount, setCorrectCount] = useState(0);
-  const [streak, setStreak] = useState(0);
   const [missedHandIds, setMissedHandIds] = useState<HandId[]>([]);
+  const [isQuitOpen, setIsQuitOpen] = useState(false);
+  const index = session.index;
   /**
    * 連打対策。state の更新は次の描画までに反映されないため、
    * 同じタイミングで複数回クリックされても1回だけ集計されるように同期的な鍵を持つ。
@@ -40,20 +40,22 @@ export function QuizGame() {
   const question: QuizQuestion | undefined = questions[index];
   const isAnswered = selected !== null;
   const isCorrect = isAnswered && !!question && selected === question.answerId;
-  const isLastQuestion = index >= QUESTIONS_PER_SET - 1;
+  const isLastQuestion = session.isLastQuestion;
 
-  const start = useCallback((level: Difficulty) => {
-    answerLockRef.current = false;
-    setDifficulty(level);
-    setQuestions(generateQuizSet(level, QUESTIONS_PER_SET));
-    setIndex(0);
-    setSelected(null);
-    setIsRetryQuestion(false);
-    setCorrectCount(0);
-    setStreak(0);
-    setMissedHandIds([]);
-    setPhase('playing');
-  }, []);
+  const start = useCallback(
+    (level: Difficulty) => {
+      answerLockRef.current = false;
+      setDifficulty(level);
+      setQuestions(generateQuizSet(level, QUESTIONS_PER_SET));
+      setSelected(null);
+      setIsRetryQuestion(false);
+      setMissedHandIds([]);
+      setIsQuitOpen(false);
+      session.reset();
+      setPhase('playing');
+    },
+    [session],
+  );
 
   const handleAnswer = useCallback(
     (handId: HandId) => {
@@ -66,28 +68,43 @@ export function QuizGame() {
       // 復習問題は成績に含めない（プレッシャーを与えないため）
       if (isRetryQuestion) return;
 
-      setCorrectCount((current) => current + (answeredCorrectly ? 1 : 0));
-      setStreak((current) => (answeredCorrectly ? current + 1 : 0));
+      session.recordAnswer(answeredCorrectly);
       if (!answeredCorrectly) {
         setMissedHandIds((current) => [...current, question.answerId]);
       }
       recordQuizAnswer(question.answerId, answeredCorrectly);
     },
-    [question, selected, isRetryQuestion, recordQuizAnswer],
+    [question, selected, isRetryQuestion, recordQuizAnswer, session],
   );
 
   const goNext = useCallback(() => {
     if (selected === null) return;
     playFeedback('next');
     answerLockRef.current = false;
-    if (isLastQuestion) {
+
+    const action = session.advance();
+    if (action === 'result') {
       setPhase('result');
       return;
     }
-    setIndex((current) => current + 1);
+    if (action === 'restart') {
+      // 無限モードを解除したので、新しい10問セッションを作り直す
+      setQuestions(generateQuizSet(difficulty, QUESTIONS_PER_SET));
+      setMissedHandIds([]);
+    } else {
+      // 無限モードでは足りなくなった分を追加で生成する
+      setQuestions((current) => {
+        if (session.index + 1 < current.length) return current;
+        const previous = current[current.length - 1]?.answerId;
+        return [
+          ...current,
+          generateQuizQuestion(difficulty, { avoid: previous ? [previous] : [] }),
+        ];
+      });
+    }
     setSelected(null);
     setIsRetryQuestion(false);
-  }, [selected, isLastQuestion]);
+  }, [selected, session, difficulty]);
 
   /** 同じ役で別の問題に差し替えて、もう一度考えてもらう */
   const retrySameHand = useCallback(() => {
@@ -148,7 +165,7 @@ export function QuizGame() {
     return (
       <QuizResult
         total={QUESTIONS_PER_SET}
-        correct={correctCount}
+        correct={session.correctCount}
         missedHandIds={missedHandIds}
         onRetry={() => start(difficulty)}
         onChangeDifficulty={() => setPhase('setup')}
@@ -187,11 +204,16 @@ export function QuizGame() {
         </div>
 
         <GameStatsBar
-          current={index + 1}
-          total={QUESTIONS_PER_SET}
-          correct={correctCount}
-          streak={streak}
+          current={session.questionNumber}
+          total={session.total}
+          correct={session.correctCount}
+          streak={session.streak}
           isAnswered={isAnswered}
+          isEndless={session.isEndless}
+          onToggleEndless={session.setEndless}
+          toggleDisabled={isAnswered}
+          onQuit={() => setIsQuitOpen(true)}
+          notice={session.notice}
         />
       </header>
 
@@ -222,6 +244,16 @@ export function QuizGame() {
       </section>
 
       {/* 正誤は画面全体のダイアログで伝える */}
+      {isQuitOpen ? (
+        <QuitPracticeDialog
+          modeName="役を当てる"
+          answered={session.index + (isAnswered ? 1 : 0)}
+          correct={session.correctCount}
+          streak={session.streak}
+          onContinue={() => setIsQuitOpen(false)}
+        />
+      ) : null}
+
       {isAnswered && selected ? (
         <QuizResultOverlay
           isCorrect={isCorrect}

@@ -4,20 +4,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, CheckCircle2, Eraser, Lightbulb, Sparkles, XCircle } from 'lucide-react';
 import { CardBoard } from '@/components/cards/CardBoard';
 import { GameStatsBar } from '@/components/game/GameStatsBar';
+import { QuitPracticeDialog } from '@/components/game/QuitPracticeDialog';
 import { SetResult } from '@/components/game/SetResult';
 import { Button } from '@/components/ui/Button';
 import { HANDS_BY_ID } from '@/data/hands';
+import { QUESTIONS_PER_SET, useGameSession } from '@/hooks/useGameSession';
 import { useProgress } from '@/hooks/useProgress';
 import { cn } from '@/lib/cn';
 import { currentHandName, describeShortfall } from '@/lib/feedback';
 import { playFeedback } from '@/lib/feedbackFx';
-import { generateBuildPuzzleSet } from '@/lib/generator';
+import { generateBuildPuzzle, generateBuildPuzzleSet } from '@/lib/generator';
 import { evaluateHand } from '@/lib/evaluator';
 import { BuildPuzzle, Card } from '@/lib/types';
 
 const REQUIRED_CARDS = 5;
-/** 他のモードと同じく10問で1セット */
-const PUZZLES_PER_SET = 10;
 
 type CheckResult =
   | { status: 'idle' }
@@ -27,6 +27,7 @@ type CheckResult =
 /** 学習モードB：役を作る */
 export function BuildGame() {
   const { recordBuildResult } = useProgress();
+  const session = useGameSession();
 
   const [puzzles, setPuzzles] = useState<BuildPuzzle[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -34,10 +35,8 @@ export function BuildGame() {
   const [hintedId, setHintedId] = useState<string | null>(null);
   const [result, setResult] = useState<CheckResult>({ status: 'idle' });
   const [phase, setPhase] = useState<'playing' | 'result'>('playing');
-  const [index, setIndex] = useState(0);
-  /** 一発で正解できた数（間違えても何度でも挑戦できる設計は維持する） */
-  const [firstTryCount, setFirstTryCount] = useState(0);
-  const [streak, setStreak] = useState(0);
+  const [isQuitOpen, setIsQuitOpen] = useState(false);
+  const index = session.index;
   /** 「答え合わせ」の連打で挑戦回数が二重に増えないようにする鍵（選び直すと解除） */
   const checkLockRef = useRef(false);
   /** この問題で一度でも間違えたか */
@@ -49,7 +48,7 @@ export function BuildGame() {
    * 「effect 内で setState しない」ルールはこの1箇所だけ意図的に除外する。
    */
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => setPuzzles(generateBuildPuzzleSet(PUZZLES_PER_SET)), []);
+  useEffect(() => setPuzzles(generateBuildPuzzleSet(QUESTIONS_PER_SET)), []);
 
   const puzzle: BuildPuzzle | undefined = puzzles[index];
 
@@ -76,23 +75,33 @@ export function BuildGame() {
 
   const startNextPuzzle = useCallback(() => {
     playFeedback('next');
-    if (index + 1 >= PUZZLES_PER_SET) {
+
+    const action = session.advance();
+    if (action === 'result') {
       setPhase('result');
       return;
     }
-    setIndex((current) => current + 1);
+    if (action === 'restart') {
+      setPuzzles(generateBuildPuzzleSet(QUESTIONS_PER_SET));
+    } else {
+      // 無限モードでは足りなくなった分を追加で生成する
+      setPuzzles((current) =>
+        session.index + 1 < current.length
+          ? current
+          : [...current, generateBuildPuzzle(current[current.length - 1]?.targetHandId ?? null)],
+      );
+    }
     resetPuzzleState();
-  }, [index, resetPuzzleState]);
+  }, [session, resetPuzzleState]);
 
   /** 結果画面から、もう一度10問挑戦する */
   const restartSet = useCallback(() => {
     setPhase('playing');
-    setIndex(0);
-    setFirstTryCount(0);
-    setStreak(0);
-    setPuzzles(generateBuildPuzzleSet(PUZZLES_PER_SET));
+    setIsQuitOpen(false);
+    session.reset();
+    setPuzzles(generateBuildPuzzleSet(QUESTIONS_PER_SET));
     resetPuzzleState();
-  }, [resetPuzzleState]);
+  }, [session, resetPuzzleState]);
 
   const toggleCard = useCallback(
     (card: Card) => {
@@ -130,12 +139,8 @@ export function BuildGame() {
     recordBuildResult(succeeded);
 
     if (succeeded) {
-      if (missedRef.current) {
-        setStreak(0);
-      } else {
-        setFirstTryCount((current) => current + 1);
-        setStreak((current) => current + 1);
-      }
+      // 一発で正解できたときだけ成績に加算する（やり直しは何度でもOK）
+      session.recordAnswer(!missedRef.current);
       setResult({ status: 'correct' });
       return;
     }
@@ -146,7 +151,7 @@ export function BuildGame() {
       madeHandName: currentHandName(selectedCards),
       advice: describeShortfall(puzzle.targetHandId, selectedCards),
     });
-  }, [puzzle, selectedCards, isCleared, recordBuildResult]);
+  }, [puzzle, selectedCards, isCleared, recordBuildResult, session]);
 
   /** ヒント：1回目は役の条件、2回目は正解カードを1枚うっすら光らせる */
   const useHint = useCallback(() => {
@@ -189,7 +194,7 @@ export function BuildGame() {
   }, [isCleared, isReadyToCheck, checkAnswer, startNextPuzzle]);
 
   if (phase === 'result') {
-    return <SetResult total={PUZZLES_PER_SET} correct={firstTryCount} onRetry={restartSet} />;
+    return <SetResult total={QUESTIONS_PER_SET} correct={session.correctCount} onRetry={restartSet} />;
   }
 
   if (!puzzle || !targetHand) {
@@ -207,12 +212,17 @@ export function BuildGame() {
         </div>
 
         <GameStatsBar
-          current={index + 1}
-          total={PUZZLES_PER_SET}
-          correct={firstTryCount}
-          streak={streak}
+          current={session.questionNumber}
+          total={session.total}
+          correct={session.correctCount}
+          streak={session.streak}
           isAnswered={isCleared}
           correctLabel="一発正解"
+          isEndless={session.isEndless}
+          onToggleEndless={session.setEndless}
+          toggleDisabled={isCleared}
+          onQuit={() => setIsQuitOpen(true)}
+          notice={session.notice}
         />
       </header>
 
@@ -255,7 +265,7 @@ export function BuildGame() {
         />
         <p className="mt-6 text-center text-xs text-slate-500">
           {isCleared
-            ? index + 1 >= PUZZLES_PER_SET
+            ? session.isLastQuestion
               ? 'お見事！ 「結果を見る」で成績を確認しましょう'
               : 'お見事！ 「次のお題へ」で続けられます'
             : isReadyToCheck
@@ -299,11 +309,21 @@ export function BuildGame() {
         ) : null}
       </div>
 
+      {isQuitOpen ? (
+        <QuitPracticeDialog
+          modeName="役を作る"
+          answered={session.index + (isCleared ? 1 : 0)}
+          correct={session.correctCount}
+          streak={session.streak}
+          onContinue={() => setIsQuitOpen(false)}
+        />
+      ) : null}
+
       {/* 主要アクション（スマホでは画面下部に固定） */}
       <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap gap-3 border-t border-white/10 bg-midnight-950/90 px-4 pt-3 pb-safe backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0">
         {isCleared ? (
           <Button size="lg" fullWidth onClick={startNextPuzzle}>
-            {index + 1 >= PUZZLES_PER_SET ? '結果を見る' : '次のお題へ'}
+            {session.isLastQuestion ? '結果を見る' : '次のお題へ'}
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </Button>
         ) : (
