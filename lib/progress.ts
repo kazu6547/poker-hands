@@ -64,8 +64,16 @@ export function dayDifference(from: string, to: string): number {
   return Math.round((end - start) / 86_400_000);
 }
 
+/**
+ * 保存データの回数として安全に扱える上限。
+ * 10億回はどう遊んでも届かないので、これを超える値は書き換えられた壊れたデータとみなす。
+ * （1e308 のような値をそのまま表示すると、画面が崩れてしまう）
+ */
+const MAX_COUNT = 1_000_000_000;
+
 function toCount(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return 0;
+  return Math.min(Math.floor(value), MAX_COUNT);
 }
 
 function normalizeModeStat(value: unknown): ModeStat {
@@ -232,8 +240,9 @@ export function applyBuildResult(progress: ProgressData, isCleared: boolean): Pr
 /* ------------------------------------------------------------------ */
 
 export function accuracyPercent(correct: number, total: number): number {
-  if (total <= 0) return 0;
-  return Math.round((correct / total) * 100);
+  if (!Number.isFinite(correct) || !Number.isFinite(total) || total <= 0) return 0;
+  // 保存データが壊れて correct > total になっていても、表示は 0〜100% に収める
+  return Math.min(100, Math.max(0, Math.round((correct / total) * 100)));
 }
 
 export function formatStudiedAt(iso: string | null): string {

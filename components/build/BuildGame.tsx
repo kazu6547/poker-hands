@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/Button';
 import { HANDS_BY_ID } from '@/data/hands';
 import { QUESTIONS_PER_SET, useGameSession } from '@/hooks/useGameSession';
 import { useQuestionTransition } from '@/hooks/useQuestionTransition';
+import { useStaggeredClear } from '@/hooks/useStaggeredClear';
 import { useReadyEmphasis } from '@/hooks/useReadyEmphasis';
 import { useProgress } from '@/hooks/useProgress';
 import { cn } from '@/lib/cn';
@@ -48,6 +49,8 @@ export function BuildGame() {
   const checkLockRef = useRef(false);
   /** この問題で一度でも間違えたか */
   const missedRef = useRef(false);
+  /** 「選び直す」のあとにフォーカスを戻す先（場のカード） */
+  const boardRef = useRef<HTMLElement>(null);
 
   /**
    * 初回の問題はマウント後に生成する（サーバーとクライアントで内容がずれないように）。
@@ -119,9 +122,30 @@ export function BuildGame() {
     resetPuzzleState();
   }, [session, resetPuzzleState]);
 
+  /** 選び直す：1枚ずつ戻して、指で払ったような手触りにする */
+  const removeOneSelection = useCallback(() => {
+    setSelectedIds((current) => current.slice(1));
+  }, []);
+  const removeAllSelections = useCallback(() => setSelectedIds([]), []);
+  const playClearSound = useCallback(() => playSound('card-deselect'), []);
+  /**
+   * 解除しきると「選び直す」自体が押せなくなるので、
+   * キーボードのフォーカスが body に落ちてしまう。場のカードへ置き直す。
+   */
+  const restoreFocusAfterClear = useCallback(() => {
+    if (document.activeElement !== document.body) return;
+    boardRef.current?.querySelector<HTMLButtonElement>('button:not([disabled])')?.focus();
+  }, []);
+  const { isClearing, clear } = useStaggeredClear({
+    removeOne: removeOneSelection,
+    removeAll: removeAllSelections,
+    onStart: playClearSound,
+    onFinish: restoreFocusAfterClear,
+  });
+
   const toggleCard = useCallback(
     (card: Card) => {
-      if (isCleared) return;
+      if (isCleared || isClearing) return;
       checkLockRef.current = false;
       setResult({ status: 'idle' });
       setSelectedIds((current) => {
@@ -135,15 +159,15 @@ export function BuildGame() {
         return [...current, card.id];
       });
     },
-    [isCleared],
+    [isCleared, isClearing],
   );
 
   const clearSelection = useCallback(() => {
     if (isCleared) return;
     checkLockRef.current = false;
-    setSelectedIds([]);
     setResult({ status: 'idle' });
-  }, [isCleared]);
+    clear(selectedIds.length);
+  }, [isCleared, clear, selectedIds.length]);
 
   const checkAnswer = useCallback(() => {
     if (!puzzle || selectedCards.length !== REQUIRED_CARDS || isCleared) return;
@@ -290,7 +314,7 @@ export function BuildGame() {
       </section>
 
       {/* 場のカード */}
-      <section className="panel px-3 py-6 sm:px-6 sm:py-8">
+      <section ref={boardRef} className="panel px-3 py-6 sm:px-6 sm:py-8">
         <CardBoard
           cards={puzzle.board}
           selectedIds={selectedIds}
@@ -382,7 +406,7 @@ export function BuildGame() {
                 size="lg"
                 className="flex-1"
                 onClick={clearSelection}
-                disabled={selectedIds.length === 0}
+                disabled={selectedIds.length === 0 || isClearing}
               >
                 <Eraser className="h-4 w-4" aria-hidden="true" />
                 選び直す

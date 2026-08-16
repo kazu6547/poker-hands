@@ -91,7 +91,9 @@ export function GameStatsBar({
         </div>
       ) : (
         <p className="text-center text-[0.7rem] text-slate-500">
-          無限モード：好きなだけ練習できます（終了ボタンで成績を確認）
+          {isEndless
+            ? '無限モード：好きなだけ練習できます（終了ボタンで成績を確認）'
+            : 'この問題のあと、10問チャレンジが始まります'}
         </p>
       )}
     </>

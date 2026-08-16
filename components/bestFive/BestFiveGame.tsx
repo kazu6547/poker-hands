@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/Button';
 import { HANDS_BY_ID } from '@/data/hands';
 import { QUESTIONS_PER_SET, useGameSession } from '@/hooks/useGameSession';
 import { useQuestionTransition } from '@/hooks/useQuestionTransition';
+import { useStaggeredClear } from '@/hooks/useStaggeredClear';
 import { useReadyEmphasis } from '@/hooks/useReadyEmphasis';
 import { useProgress } from '@/hooks/useProgress';
 import {
@@ -56,6 +57,8 @@ export function BestFiveGame() {
   const [notice, setNotice] = useState<AchievementNotice | undefined>(undefined);
   /** 連打で同じ問題が二重集計されないようにする同期的な鍵 */
   const answerLockRef = useRef(false);
+  /** 「選び直す」のあとにフォーカスを戻す先（7枚のカード） */
+  const boardRef = useRef<HTMLElement>(null);
 
   const selectedCards = useMemo(() => {
     if (!puzzle) return [];
@@ -84,9 +87,30 @@ export function BestFiveGame() {
     [session],
   );
 
+  /** 選び直す：1枚ずつ戻して、指で払ったような手触りにする */
+  const removeOneSelection = useCallback(() => {
+    setSelectedIds((current) => current.slice(1));
+  }, []);
+  const removeAllSelections = useCallback(() => setSelectedIds([]), []);
+  const playClearSound = useCallback(() => playSound('card-deselect'), []);
+  /**
+   * 解除しきると「選び直す」自体が押せなくなるので、
+   * キーボードのフォーカスが body に落ちてしまう。手札のカードへ置き直す。
+   */
+  const restoreFocusAfterClear = useCallback(() => {
+    if (document.activeElement !== document.body) return;
+    boardRef.current?.querySelector<HTMLButtonElement>('button:not([disabled])')?.focus();
+  }, []);
+  const { isClearing, clear } = useStaggeredClear({
+    removeOne: removeOneSelection,
+    removeAll: removeAllSelections,
+    onStart: playClearSound,
+    onFinish: restoreFocusAfterClear,
+  });
+
   const toggleCard = useCallback(
     (card: Card) => {
-      if (isAnswered) return;
+      if (isAnswered || isClearing) return;
       setSelectedIds((current) => {
         if (current.includes(card.id)) {
           playSound('card-deselect');
@@ -98,13 +122,13 @@ export function BestFiveGame() {
         return [...current, card.id];
       });
     },
-    [isAnswered],
+    [isAnswered, isClearing],
   );
 
   const clearSelection = useCallback(() => {
     if (isAnswered) return;
-    setSelectedIds([]);
-  }, [isAnswered]);
+    clear(selectedIds.length);
+  }, [isAnswered, clear, selectedIds.length]);
 
   const checkAnswer = useCallback(() => {
     if (!puzzle || isAnswered || answerLockRef.current) return;
@@ -265,7 +289,7 @@ export function BestFiveGame() {
       </header>
 
       <QuestionStage questionKey={puzzle.id} isLeaving={isLeaving}>
-      <section className="panel px-2 py-6 sm:px-6 sm:py-8">
+      <section ref={boardRef} className="panel px-2 py-6 sm:px-6 sm:py-8">
         <h1 className="text-center text-lg font-bold sm:text-xl">
           7枚の中から、最強の5枚を選ぼう
         </h1>
@@ -315,7 +339,7 @@ export function BestFiveGame() {
           size="lg"
           className="flex-1"
           onClick={clearSelection}
-          disabled={selectedIds.length === 0 || isAnswered}
+          disabled={selectedIds.length === 0 || isAnswered || isClearing}
         >
           <Eraser className="h-4 w-4" aria-hidden="true" />
           選び直す

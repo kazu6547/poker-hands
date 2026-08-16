@@ -35,6 +35,8 @@ export function QuitPracticeDialog({
   const continueButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
+    // 閉じたときに、開く前の場所（終了ボタン）へフォーカスを戻せるよう覚えておく
+    const openedFrom = document.activeElement as HTMLElement | null;
     continueButtonRef.current?.focus();
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -50,6 +52,8 @@ export function QuitPracticeDialog({
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener('keydown', handleKeyDown);
+      // ホームへ戻ったあとなど、元の要素が消えている場合は何もしない
+      if (openedFrom && openedFrom.isConnected) openedFrom.focus();
     };
   }, [onContinue]);
 

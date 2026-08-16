@@ -21,7 +21,7 @@ export function ProgressSummary() {
   const items = [
     { label: '累計回答数', value: hasRecord ? `${progress.totalAnswers}問` : '—', icon: CheckCircle2, tone: 'text-slate-100' },
     { label: '正答率', value: hasRecord ? `${accuracy}%` : '—', icon: Award, tone: 'text-emerald-300' },
-    { label: '最長連続正解', value: hasRecord ? `${progress.bestStreak}回` : '—', icon: Flame, tone: 'text-gold' },
+    { label: '連続正解記録', value: hasRecord ? `${progress.bestStreak}回` : '—', icon: Flame, tone: 'text-gold' },
   ];
 
   return (
@@ -73,11 +73,15 @@ export function ProgressSummary() {
           return (
             <div
               key={item.label}
-              className="rounded-xl border border-white/10 bg-white/[0.03] px-2 py-2.5 text-center sm:px-4"
+              className="rounded-xl border border-white/10 bg-white/[0.03] px-1.5 py-2.5 text-center sm:px-4"
             >
-              <dt className="flex items-center justify-center gap-1 text-[0.65rem] font-medium text-slate-400 sm:text-xs">
+              {/*
+                「連続正解記録」は狭い画面だと1行に収まらないため、省略せず折り返す。
+                3つの数値が横並びでそろうよう、見出しの高さだけ確保しておく。
+              */}
+              <dt className="flex min-h-[2.4em] items-center justify-center gap-1 text-[0.65rem] font-medium leading-tight text-slate-400 sm:min-h-0 sm:text-xs">
                 <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                <span className="truncate">{item.label}</span>
+                <span className="min-w-0">{item.label}</span>
               </dt>
               <dd className={cn('mt-1 text-lg font-bold tabular-nums sm:text-xl', item.tone)}>
                 {item.value}

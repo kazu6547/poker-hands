@@ -115,7 +115,11 @@ const config: Config = {
             boxShadow: '0 18px 40px -16px rgba(0, 0, 0, 0.85), 0 0 0 4px rgba(52, 211, 153, 0.35)',
           },
         },
-        /* ヒント表示：金色の輪郭は常に残しつつ、外側だけを脈打たせる */
+        /*
+          ヒント表示：外側だけを短く脈打たせる。
+          金色の輪郭はクラス（ring）側で常に描いているので、
+          アニメーションが止まってもヒント対象だと分かる。
+        */
         'pulse-ring': {
           '0%, 100%': {
             boxShadow: '0 0 0 2px #E8C87E, 0 0 0 0 rgba(232, 200, 126, 0.5)',
@@ -137,7 +141,8 @@ const config: Config = {
         'ready-in': 'ready-in 0.18s ease-out 1',
         nudge: 'nudge 0.2s ease-out 1',
         'card-highlight': 'card-highlight 0.16s ease-out 1',
-        'pulse-ring': 'pulse-ring 1.8s ease-in-out infinite',
+        /* 3回だけ脈打って止める（点滅させ続けない） */
+        'pulse-ring': 'pulse-ring 1.1s ease-in-out 3',
       },
     },
   },
