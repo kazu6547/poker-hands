@@ -13,6 +13,12 @@ export interface CardHandProps {
   highlightIds?: string[];
   /** 強調対象以外のカードを控えめに表示する */
   dimOthers?: boolean;
+  /** 強調したカードを少し前に出す（正解の5枚・勝者側） */
+  liftHighlighted?: boolean;
+  /** 強調したカードに足す読み上げ説明（「最強の5枚」など） */
+  highlightNote?: string;
+  /** 控えめにしたカードに足す読み上げ説明（「使わないカード」など） */
+  dimNote?: string;
 }
 
 /** 手札（並べるだけ・操作なし）の表示 */
@@ -24,6 +30,9 @@ export function CardHand({
   label,
   highlightIds,
   dimOthers = false,
+  liftHighlighted = false,
+  highlightNote,
+  dimNote,
 }: CardHandProps) {
   return (
     <div
@@ -33,15 +42,17 @@ export function CardHand({
     >
       {cards.map((card, index) => {
         const isHighlighted = highlightIds ? highlightIds.includes(card.id) : false;
+        const isDimmed = dimOthers && !isHighlighted;
         return (
           <PlayingCard
             key={card.id}
             card={card}
             size={size}
             index={index}
-            celebrate={celebrate}
+            celebrate={celebrate || (liftHighlighted && isHighlighted)}
             selected={highlightIds ? isHighlighted : false}
-            dimmed={dimOthers && !isHighlighted}
+            dimmed={isDimmed}
+            note={isHighlighted ? highlightNote : isDimmed ? dimNote : undefined}
           />
         );
       })}

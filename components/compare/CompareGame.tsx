@@ -4,12 +4,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { SlidersHorizontal } from 'lucide-react';
 import { CardHand } from '@/components/cards/CardHand';
 import { GameStatsBar } from '@/components/game/GameStatsBar';
+import { QuestionStage } from '@/components/game/QuestionStage';
 import { QuitPracticeDialog } from '@/components/game/QuitPracticeDialog';
 import { ResultOverlay } from '@/components/game/ResultOverlay';
 import { SetResult } from '@/components/game/SetResult';
 import { DifficultyPicker } from '@/components/quiz/DifficultyPicker';
 import { HANDS_BY_ID } from '@/data/hands';
 import { QUESTIONS_PER_SET, useGameSession } from '@/hooks/useGameSession';
+import { useQuestionTransition } from '@/hooks/useQuestionTransition';
 import { useProgress } from '@/hooks/useProgress';
 import { cn } from '@/lib/cn';
 import {
@@ -95,9 +97,7 @@ export function CompareGame() {
     [puzzle, selected, recordModeAnswer, session, progress],
   );
 
-  const goNext = useCallback(() => {
-    if (selected === null) return;
-    playSound('next-question');
+  const commitNext = useCallback(() => {
     setNotice(undefined);
     answerLockRef.current = false;
 
@@ -117,7 +117,18 @@ export function CompareGame() {
       );
     }
     setSelected(null);
-  }, [selected, session, difficulty]);
+  }, [session, difficulty]);
+
+  const playNextSound = useCallback(() => playSound('next-question'), []);
+  const { isLeaving, requestNext } = useQuestionTransition({
+    onStart: playNextSound,
+    onCommit: commitNext,
+  });
+
+  const goNext = useCallback(() => {
+    if (selected === null) return;
+    requestNext();
+  }, [selected, requestNext]);
 
   /* キーボード操作：1 / 2 / 3 で回答、Enter で次へ */
   useEffect(() => {
@@ -208,81 +219,112 @@ export function CompareGame() {
       </header>
 
       {/* 回答前は役名や解説を出さず、カードだけで判断してもらう */}
-      <section className="panel px-2 py-6 sm:px-8 sm:py-8">
-        <h1 className="text-center text-lg font-bold sm:text-xl">どちらの手が強い？</h1>
+      <QuestionStage questionKey={puzzle.id} isLeaving={isLeaving} className="space-y-6">
+        <section className="panel px-2 py-6 sm:px-8 sm:py-8">
+          <h1 className="text-center text-lg font-bold sm:text-xl">どちらの手が強い？</h1>
 
-        <div className="mt-6 space-y-4 sm:space-y-5">
-          {(['A', 'B'] as const).map((side) => (
-            <div
-              key={side}
-              className="rounded-2xl border border-white/10 bg-white/[0.03] px-1.5 py-4 sm:px-5"
-            >
-              <p className="mb-3 flex items-center justify-center gap-2">
-                <span
+          <div className="mt-6 space-y-4 sm:space-y-5">
+            {(['A', 'B'] as const).map((side) => {
+              // 回答後だけ、勝った側をそっと前に出して、負けた側を一段落ち着かせる
+              const outcome = !isAnswered
+                ? 'pending'
+                : puzzle.answer === 'tie'
+                  ? 'tie'
+                  : puzzle.answer === side
+                    ? 'winner'
+                    : 'loser';
+
+              return (
+                <div
+                  key={side}
                   className={cn(
-                    'grid h-7 w-7 place-items-center rounded-lg text-sm font-bold',
-                    side === 'A' ? 'bg-emerald-400/15 text-emerald-300' : 'bg-iris/20 text-iris-soft',
+                    'rounded-2xl border px-1.5 py-4 transition-[transform,opacity,border-color,background-color] duration-200 ease-out sm:px-5',
+                    outcome === 'winner'
+                      ? '-translate-y-0.5 border-emerald-400/50 bg-emerald-400/8'
+                      : outcome === 'loser'
+                        ? 'border-white/10 bg-white/[0.02] opacity-[0.72]'
+                        : 'border-white/10 bg-white/[0.03]',
                   )}
                 >
-                  {side}
-                </span>
-                <span className="text-xs font-semibold text-slate-400">{side}の手</span>
-              </p>
-              <CardHand
-                key={`${puzzle.id}-${side}`}
-                cards={side === 'A' ? puzzle.handA : puzzle.handB}
-                size="lg"
-                label={`${side}の手札5枚`}
-              />
-            </div>
-          ))}
-        </div>
-      </section>
+                  <p className="mb-3 flex items-center justify-center gap-2">
+                    <span
+                      className={cn(
+                        'grid h-7 w-7 place-items-center rounded-lg text-sm font-bold',
+                        side === 'A' ? 'bg-emerald-400/15 text-emerald-300' : 'bg-iris/20 text-iris-soft',
+                      )}
+                    >
+                      {side}
+                    </span>
+                    <span className="text-xs font-semibold text-slate-400">{side}の手</span>
+                    {outcome === 'winner' ? (
+                      <span className="rounded-full border border-emerald-400/40 bg-emerald-400/12 px-2 py-0.5 text-[0.65rem] font-bold text-emerald-200">
+                        勝ち
+                      </span>
+                    ) : null}
+                    {outcome === 'tie' ? (
+                      <span className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[0.65rem] font-bold text-slate-300">
+                        引き分け
+                      </span>
+                    ) : null}
+                  </p>
+                  <CardHand
+                    cards={side === 'A' ? puzzle.handA : puzzle.handB}
+                    size="lg"
+                    label={`${side}の手札5枚${outcome === 'winner' ? '（勝ち）' : ''}`}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        </section>
 
-      <section aria-label="選択肢" className="grid gap-3 sm:grid-cols-3">
-        {ANSWER_ORDER.map((answer, optionIndex) => {
-          const state = !isAnswered
-            ? 'idle'
-            : answer === puzzle.answer
-              ? 'correct'
-              : answer === selected
-                ? 'wrong'
-                : 'muted';
+        <section aria-label="選択肢" className="grid gap-3 sm:grid-cols-3">
+          {ANSWER_ORDER.map((answer, optionIndex) => {
+            const state = !isAnswered
+              ? 'idle'
+              : answer === puzzle.answer
+                ? 'correct'
+                : answer === selected
+                  ? 'wrong'
+                  : 'muted';
 
-          return (
-            <button
-              key={answer}
-              type="button"
-              disabled={isAnswered}
-              onClick={() => handleAnswer(answer)}
-              className={cn(
-                'flex min-h-[3.75rem] w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all duration-200',
-                state === 'idle' &&
-                  'border-white/10 bg-white/[0.04] hover:border-emerald-400/50 hover:bg-white/[0.08]',
-                state === 'correct' && 'border-emerald-400/70 bg-emerald-400/12',
-                state === 'wrong' && 'border-rose-400/70 bg-rose-500/12',
-                state === 'muted' && 'border-white/5 bg-white/[0.02] opacity-50',
-                isAnswered && 'cursor-default',
-              )}
-            >
-              <span
-                aria-hidden="true"
+            return (
+              <button
+                key={answer}
+                type="button"
+                disabled={isAnswered}
+                onClick={() => handleAnswer(answer)}
                 className={cn(
-                  'grid h-7 w-7 shrink-0 place-items-center rounded-md text-xs font-bold tabular-nums',
-                  state === 'correct'
-                    ? 'bg-emerald-400 text-midnight-950'
-                    : state === 'wrong'
-                      ? 'bg-rose-400 text-midnight-950'
-                      : 'bg-white/10 text-slate-300',
+                  'flex min-h-[3.75rem] w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition-[transform,opacity,border-color,background-color] duration-200 ease-out',
+                  state === 'idle' &&
+                    'border-white/10 bg-white/[0.04] hover:-translate-y-px hover:border-emerald-400/50 hover:bg-white/[0.08] active:translate-y-px active:scale-[0.99] active:duration-75',
+                  state === 'correct' && 'border-emerald-400/70 bg-emerald-400/12',
+                  state === 'wrong' && 'border-rose-400/70 bg-rose-500/12',
+                  state === 'muted' && 'border-white/5 bg-white/[0.02] opacity-50',
+                  isAnswered && 'cursor-default',
                 )}
               >
-                {optionIndex + 1}
-              </span>
-              <span className="text-base font-bold text-white">{COMPARE_ANSWER_LABEL[answer]}</span>
-            </button>
-          );
-        })}
-      </section>
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    'grid h-7 w-7 shrink-0 place-items-center rounded-md text-xs font-bold tabular-nums',
+                    state === 'correct'
+                      ? 'bg-emerald-400 text-midnight-950'
+                      : state === 'wrong'
+                        ? 'bg-rose-400 text-midnight-950'
+                        : 'bg-white/10 text-slate-300',
+                  )}
+                >
+                  {optionIndex + 1}
+                </span>
+                <span className="text-base font-bold text-white">
+                  {COMPARE_ANSWER_LABEL[answer]}
+                </span>
+              </button>
+            );
+          })}
+        </section>
+      </QuestionStage>
 
       {isQuitOpen ? (
         <QuitPracticeDialog
@@ -299,22 +341,51 @@ export function CompareGame() {
           isCorrect={isCorrect}
           primaryLabel={isLastQuestion ? '結果を見る' : '次の問題へ'}
           notice={notice}
+          isLeaving={isLeaving}
           onPrimary={goNext}
         >
           <p className="mt-3 text-xl font-bold text-white sm:text-2xl">
             {compareResultHeadline(puzzle.answer)}
           </p>
 
-          <dl className="mx-auto mt-5 grid max-w-sm grid-cols-2 gap-3 text-left">
-            <div className="rounded-xl border border-emerald-400/25 bg-emerald-400/8 px-3 py-2">
-              <dt className="text-[0.7rem] font-semibold text-emerald-200">A</dt>
-              <dd className="mt-0.5 text-sm font-bold text-white">{nameA}</dd>
-            </div>
-            <div className="rounded-xl border border-iris/30 bg-iris/12 px-3 py-2">
-              <dt className="text-[0.7rem] font-semibold text-iris-soft">B</dt>
-              <dd className="mt-0.5 text-sm font-bold text-white">{nameB}</dd>
-            </div>
-          </dl>
+          {/* A・B のどちらも読めるようにしたうえで、勝った側だけを少し前に出す */}
+          <div className="mx-auto mt-5 max-w-sm space-y-3 text-left">
+            {(['A', 'B'] as const).map((side) => {
+              const isWinner = puzzle.answer === side;
+              const isLoser = puzzle.answer !== 'tie' && !isWinner;
+
+              return (
+                <div
+                  key={side}
+                  className={cn(
+                    'rounded-xl border px-3 py-2.5 transition-transform duration-200 ease-out',
+                    isWinner
+                      ? '-translate-y-0.5 border-emerald-400/50 bg-emerald-400/10'
+                      : 'border-white/10 bg-white/[0.03]',
+                    isLoser && 'opacity-[0.72]',
+                  )}
+                >
+                  <p className="flex items-center gap-2">
+                    <span className="text-[0.7rem] font-bold text-slate-300">{side}</span>
+                    <span className="text-sm font-bold text-white">
+                      {side === 'A' ? nameA : nameB}
+                    </span>
+                    {isWinner ? (
+                      <span className="ml-auto rounded-full border border-emerald-400/40 bg-emerald-400/12 px-2 py-0.5 text-[0.65rem] font-bold text-emerald-200">
+                        勝ち
+                      </span>
+                    ) : null}
+                  </p>
+                  <CardHand
+                    cards={side === 'A' ? puzzle.handA : puzzle.handB}
+                    size="sm"
+                    className="mt-2"
+                    label={`${side}の手札5枚${isWinner ? '（勝ち）' : ''}`}
+                  />
+                </div>
+              );
+            })}
+          </div>
 
           <p className="mt-5 text-sm leading-relaxed text-slate-300">{describeComparison(puzzle)}</p>
 

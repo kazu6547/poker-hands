@@ -1,6 +1,10 @@
 import type { Config } from 'tailwindcss';
 
 const config: Config = {
+  /** タッチ端末で hover が貼り付かないよう、hover: は hover 可能な環境だけに適用する */
+  future: {
+    hoverOnlyWhenSupported: true,
+  },
   content: [
     './app/**/*.{ts,tsx}',
     './components/**/*.{ts,tsx}',
@@ -85,13 +89,31 @@ const config: Config = {
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         'card-in': {
-          '0%': { opacity: '0', transform: 'translateY(10px) scale(0.97)' },
+          '0%': { opacity: '0', transform: 'translateY(6px) scale(0.985)' },
           '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
         },
-        pop: {
-          '0%': { transform: 'translateY(0) scale(1)' },
-          '45%': { transform: 'translateY(-10px) scale(1.05)' },
-          '100%': { transform: 'translateY(0) scale(1)' },
+        /* 新しい問題の入り方。短く、下から少しだけ */
+        'question-in': {
+          '0%': { opacity: '0', transform: 'translateY(6px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        /* 回答できる状態になった一瞬だけの、控えめな存在感アップ */
+        'ready-in': {
+          '0%, 100%': { transform: 'scale(1)' },
+          '50%': { transform: 'scale(1.015)' },
+        },
+        /* 選べないカードを押したときの、ごく小さな押し返し */
+        nudge: {
+          '0%, 100%': { transform: 'translateX(0)' },
+          '35%': { transform: 'translateX(-2px)' },
+          '70%': { transform: 'translateX(2px)' },
+        },
+        /* 正解カードを順番にほんの少し光らせる */
+        'card-highlight': {
+          '0%, 100%': { boxShadow: '0 18px 40px -16px rgba(0, 0, 0, 0.85)' },
+          '50%': {
+            boxShadow: '0 18px 40px -16px rgba(0, 0, 0, 0.85), 0 0 0 4px rgba(52, 211, 153, 0.35)',
+          },
         },
         /* ヒント表示：金色の輪郭は常に残しつつ、外側だけを脈打たせる */
         'pulse-ring': {
@@ -105,8 +127,16 @@ const config: Config = {
       },
       animation: {
         'fade-up': 'fade-up 0.35s ease-out both',
-        'card-in': 'card-in 0.35s ease-out both',
-        pop: 'pop 0.5s ease-out both',
+        /*
+          backwards にするのは、終わったあとに transform を保持させないため。
+          both だと、カードの浮き・沈み（選択・hover・押下）が
+          アニメーションの最終値に上書きされて効かなくなる。
+        */
+        'card-in': 'card-in 0.24s ease-out backwards',
+        'question-in': 'question-in 0.2s ease-out backwards',
+        'ready-in': 'ready-in 0.18s ease-out 1',
+        nudge: 'nudge 0.2s ease-out 1',
+        'card-highlight': 'card-highlight 0.16s ease-out 1',
         'pulse-ring': 'pulse-ring 1.8s ease-in-out infinite',
       },
     },

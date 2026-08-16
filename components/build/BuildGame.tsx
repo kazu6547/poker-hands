@@ -5,14 +5,18 @@ import { ArrowRight, CheckCircle2, Eraser, Lightbulb, Sparkles, XCircle } from '
 import { CardBoard } from '@/components/cards/CardBoard';
 import { AchievementBadge } from '@/components/game/AchievementBadge';
 import { GameStatsBar } from '@/components/game/GameStatsBar';
+import { QuestionStage } from '@/components/game/QuestionStage';
 import { QuitPracticeDialog } from '@/components/game/QuitPracticeDialog';
+import { SelectionStatus } from '@/components/game/SelectionStatus';
 import { SetResult } from '@/components/game/SetResult';
 import { Button } from '@/components/ui/Button';
 import { HANDS_BY_ID } from '@/data/hands';
 import { QUESTIONS_PER_SET, useGameSession } from '@/hooks/useGameSession';
+import { useQuestionTransition } from '@/hooks/useQuestionTransition';
+import { useReadyEmphasis } from '@/hooks/useReadyEmphasis';
 import { useProgress } from '@/hooks/useProgress';
 import { cn } from '@/lib/cn';
-import { currentHandName, describeShortfall } from '@/lib/feedback';
+import { currentHandName, describeShortfall, explainEvaluation } from '@/lib/feedback';
 import { AchievementNotice, resolveAnswerFeedback } from '@/lib/achievements';
 import { playSound } from '@/lib/feedbackFx';
 import { generateBuildPuzzle, generateBuildPuzzleSet } from '@/lib/generator';
@@ -80,9 +84,7 @@ export function BuildGame() {
     setNotice(undefined);
   }, []);
 
-  const startNextPuzzle = useCallback(() => {
-    playSound('next-question');
-
+  const commitNextPuzzle = useCallback(() => {
     const action = session.advance();
     if (action === 'result') {
       setPhase('result');
@@ -100,6 +102,12 @@ export function BuildGame() {
     }
     resetPuzzleState();
   }, [session, resetPuzzleState]);
+
+  const playNextSound = useCallback(() => playSound('next-question'), []);
+  const { isLeaving, requestNext: startNextPuzzle } = useQuestionTransition({
+    onStart: playNextSound,
+    onCommit: commitNextPuzzle,
+  });
 
   /** 結果画面から、もう一度10問挑戦する */
   const restartSet = useCallback(() => {
@@ -174,6 +182,12 @@ export function BuildGame() {
       advice: describeShortfall(puzzle.targetHandId, selectedCards),
     });
   }, [puzzle, selectedCards, isCleared, recordBuildResult, session, progress]);
+
+  // 「答え合わせ」が押せるようになったことを、うるさくならない範囲で伝える
+  const { justBecameReady, showIdleHint } = useReadyEmphasis(
+    isReadyToCheck && !isCleared,
+    puzzle?.id ?? '',
+  );
 
   /** ヒント：1回目は役の条件、2回目は正解カードを1枚うっすら光らせる */
   const useHint = useCallback(() => {
@@ -252,6 +266,7 @@ export function BuildGame() {
         お題。答えの作り方が分かってしまうため、役の条件や説明はここに出さない。
         条件はヒントを押したとき、解説は答え合わせのあとにだけ表示する。
       */}
+      <QuestionStage questionKey={puzzle.id} isLeaving={isLeaving} className="space-y-6">
       <section className="panel px-5 py-4 text-center sm:py-5">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">お題</p>
         <h1 className="mt-1.5 text-2xl font-bold sm:text-3xl">
@@ -277,7 +292,6 @@ export function BuildGame() {
       {/* 場のカード */}
       <section className="panel px-3 py-6 sm:px-6 sm:py-8">
         <CardBoard
-          key={puzzle.id}
           cards={puzzle.board}
           selectedIds={selectedIds}
           hintedId={hintedId}
@@ -285,15 +299,22 @@ export function BuildGame() {
           celebrate={isCleared}
           onToggle={toggleCard}
         />
-        <p className="mt-6 text-center text-xs text-slate-500">
-          {isCleared
-            ? session.isLastQuestion
+        {isCleared ? (
+          <p className="mt-6 text-center text-xs text-slate-500">
+            {session.isLastQuestion
               ? 'お見事！ 「結果を見る」で成績を確認しましょう'
-              : 'お見事！ 「次のお題へ」で続けられます'
-            : isReadyToCheck
-              ? '5枚そろいました。答え合わせをしてみましょう（Enter キーでもOK）'
-              : `カードをタップして選びます（あと ${REQUIRED_CARDS - selectedIds.length} 枚）`}
-        </p>
+              : 'お見事！ 「次のお題へ」で続けられます'}
+          </p>
+        ) : (
+          <SelectionStatus
+            className="mt-6"
+            selected={selectedIds.length}
+            required={REQUIRED_CARDS}
+            readyMessage="選択完了。判定できます（Enter キーでもOK）"
+            hintMessage={`カードをタップして選びます（あと ${REQUIRED_CARDS - selectedIds.length} 枚）`}
+            announcement="5枚選択済み。判定できます。"
+          />
+        )}
       </section>
 
       {/* 判定結果 */}
@@ -306,7 +327,10 @@ export function BuildGame() {
             </p>
             <p className="mt-2 flex items-start gap-2 text-sm leading-relaxed text-slate-300">
               <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" aria-hidden="true" />
-              <span>{targetHand.howToSpot}</span>
+              <span>
+                {/* どのカードで役ができているのかを、1文で言葉にする */}
+                {explainEvaluation(selectedCards) || targetHand.howToSpot}
+              </span>
             </p>
             {notice ? <AchievementBadge notice={notice} /> : null}
           </div>
@@ -331,6 +355,7 @@ export function BuildGame() {
           </div>
         ) : null}
       </div>
+      </QuestionStage>
 
       {isQuitOpen ? (
         <QuitPracticeDialog
@@ -378,7 +403,12 @@ export function BuildGame() {
             </div>
             <Button
               size="lg"
-              className="w-full sm:w-auto sm:flex-1"
+              className={cn(
+                'w-full sm:w-auto sm:flex-1',
+                // 押せるようになった瞬間と、待たせてしまったときだけ、そっと合図する
+                justBecameReady && 'animate-ready-in',
+                showIdleHint && 'btn-shimmer',
+              )}
               onClick={checkAnswer}
               disabled={!isReadyToCheck}
             >

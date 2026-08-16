@@ -5,6 +5,7 @@ import { ResultOverlay } from '@/components/game/ResultOverlay';
 import { HANDS_BY_ID } from '@/data/hands';
 import { AchievementNotice } from '@/lib/achievements';
 import { explainEvaluation } from '@/lib/feedback';
+import { keyCardIds } from '@/lib/handStructure';
 import { Card, HandId } from '@/lib/types';
 
 export interface QuizResultOverlayProps {
@@ -16,6 +17,7 @@ export interface QuizResultOverlayProps {
   cards: Card[];
   isLastQuestion: boolean;
   notice?: AchievementNotice;
+  isLeaving?: boolean;
   onNext: () => void;
   onRetry: () => void;
 }
@@ -28,17 +30,21 @@ export function QuizResultOverlay({
   cards,
   isLastQuestion,
   notice,
+  isLeaving = false,
   onNext,
   onRetry,
 }: QuizResultOverlayProps) {
   const answerHand = HANDS_BY_ID[answerId];
   const selectedHand = HANDS_BY_ID[selectedId];
   const reason = explainEvaluation(cards);
+  // 役の中心になっているカードだけを少し前に出して、役の形が目で追えるようにする
+  const coreIds = keyCardIds(cards);
 
   return (
     <ResultOverlay
       isCorrect={isCorrect}
       notice={notice}
+      isLeaving={isLeaving}
       primaryLabel={isLastQuestion ? '結果を見る' : '次の問題へ'}
       onPrimary={onNext}
       secondaryLabel={isCorrect ? undefined : '同じ役をもう一度'}
@@ -50,7 +56,18 @@ export function QuizResultOverlay({
       <p className="mt-1 text-2xl font-bold text-white sm:text-3xl">{answerHand.nameJa}</p>
       <p className="mt-0.5 text-xs text-slate-500">{answerHand.nameEn}</p>
 
-      <CardHand cards={cards} size="sm" className="mt-5" label="この問題のカード5枚" />
+      <CardHand
+        cards={cards}
+        size="sm"
+        className="mt-5"
+        label="この問題のカード5枚"
+        highlightIds={coreIds.length < cards.length ? coreIds : undefined}
+        liftHighlighted
+        highlightNote="役の中心"
+      />
+      {coreIds.length > 0 && coreIds.length < cards.length ? (
+        <p className="mt-2 text-[0.7rem] text-slate-500">緑の枠が、この役を作っているカードです</p>
+      ) : null}
 
       <p className="mt-5 text-sm leading-relaxed text-slate-300">
         {reason || answerHand.shortDescription}

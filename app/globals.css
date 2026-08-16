@@ -42,6 +42,41 @@
   .eyebrow {
     @apply text-xs font-semibold uppercase tracking-[0.2em] text-slate-400;
   }
+
+  /*
+    問題の入れ替え。
+    入場アニメーションと退場トランジションは別の要素に分ける
+    （同じ要素だとアニメーションの最終値がトランジションに勝ってしまうため）。
+  */
+  .question-leave {
+    @apply transition-[opacity,transform] duration-100 ease-in;
+  }
+
+  .question-leave[data-leaving='true'] {
+    @apply pointer-events-none translate-y-1 opacity-0;
+  }
+
+  /* 回答できる状態が続いているときの、1回だけの淡いハイライト */
+  .btn-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      100deg,
+      transparent 22%,
+      rgba(255, 255, 255, 0.32) 50%,
+      transparent 78%
+    );
+    transform: translateX(-120%);
+    animation: btn-shimmer 0.55s ease-out 1;
+  }
+}
+
+@keyframes btn-shimmer {
+  to {
+    transform: translateX(120%);
+  }
 }
 
 @layer utilities {

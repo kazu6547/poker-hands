@@ -1,17 +1,22 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, Eraser, Layers, SlidersHorizontal } from 'lucide-react';
+import { CheckCircle2, Eraser, SlidersHorizontal } from 'lucide-react';
 import { PlayingCard } from '@/components/cards/PlayingCard';
 import { CardHand } from '@/components/cards/CardHand';
+import { DelayedReveal } from '@/components/game/DelayedReveal';
 import { GameStatsBar } from '@/components/game/GameStatsBar';
+import { QuestionStage } from '@/components/game/QuestionStage';
 import { QuitPracticeDialog } from '@/components/game/QuitPracticeDialog';
+import { SelectionStatus } from '@/components/game/SelectionStatus';
 import { ResultOverlay } from '@/components/game/ResultOverlay';
 import { SetResult } from '@/components/game/SetResult';
 import { DifficultyPicker } from '@/components/quiz/DifficultyPicker';
 import { Button } from '@/components/ui/Button';
 import { HANDS_BY_ID } from '@/data/hands';
 import { QUESTIONS_PER_SET, useGameSession } from '@/hooks/useGameSession';
+import { useQuestionTransition } from '@/hooks/useQuestionTransition';
+import { useReadyEmphasis } from '@/hooks/useReadyEmphasis';
 import { useProgress } from '@/hooks/useProgress';
 import {
   BestFivePuzzle,
@@ -19,6 +24,7 @@ import {
   generateBestFivePuzzle,
   isBestFiveSelection,
 } from '@/lib/bestFive';
+import { cn } from '@/lib/cn';
 import { evaluateHand } from '@/lib/evaluator';
 import { explainEvaluation } from '@/lib/feedback';
 import { AchievementNotice, resolveAnswerFeedback } from '@/lib/achievements';
@@ -123,9 +129,7 @@ export function BestFiveGame() {
     recordModeAnswer('bestFive', answeredCorrectly);
   }, [puzzle, isAnswered, selectedCards, recordModeAnswer, session, progress]);
 
-  const goNext = useCallback(() => {
-    if (!isAnswered) return;
-    playSound('next-question');
+  const commitNext = useCallback(() => {
     setNotice(undefined);
     answerLockRef.current = false;
 
@@ -138,7 +142,24 @@ export function BestFiveGame() {
     setPuzzle(generateBestFivePuzzle(difficulty));
     setSelectedIds([]);
     setIsAnswered(false);
-  }, [isAnswered, session, difficulty]);
+  }, [session, difficulty]);
+
+  const playNextSound = useCallback(() => playSound('next-question'), []);
+  const { isLeaving, requestNext } = useQuestionTransition({
+    onStart: playNextSound,
+    onCommit: commitNext,
+  });
+
+  const goNext = useCallback(() => {
+    if (!isAnswered) return;
+    requestNext();
+  }, [isAnswered, requestNext]);
+
+  // 「答え合わせ」が押せるようになったことを、うるさくならない範囲で伝える
+  const { justBecameReady, showIdleHint } = useReadyEmphasis(
+    isReadyToCheck && !isAnswered,
+    puzzle?.id ?? '',
+  );
 
   /* キーボード操作：Enter で答え合わせ／次の問題へ */
   useEffect(() => {
@@ -189,6 +210,7 @@ export function BestFiveGame() {
   if (!puzzle) return null;
 
   const bestIds = puzzle.best.cards.map((card) => card.id);
+  const unusedCards = puzzle.cards.filter((card) => !bestIds.includes(card.id));
   const bestHand = HANDS_BY_ID[puzzle.best.evaluation.handId];
   const selectedHandName =
     selectedCards.length === REQUIRED_CARDS
@@ -203,7 +225,9 @@ export function BestFiveGame() {
       index={cardIndex}
       selected={selectedIds.includes(card.id)}
       celebrate={isCorrect && selectedIds.includes(card.id)}
-      disabled={isAnswered || (isReadyToCheck && !selectedIds.includes(card.id))}
+      disabled={isAnswered}
+      // 5枚そろっているときは、未選択のカードを押しても小さく押し返すだけにする
+      blocked={!isAnswered && isReadyToCheck && !selectedIds.includes(card.id)}
       onSelect={toggleCard}
     />
   );
@@ -240,6 +264,7 @@ export function BestFiveGame() {
         />
       </header>
 
+      <QuestionStage questionKey={puzzle.id} isLeaving={isLeaving}>
       <section className="panel px-2 py-6 sm:px-6 sm:py-8">
         <h1 className="text-center text-lg font-bold sm:text-xl">
           7枚の中から、最強の5枚を選ぼう
@@ -273,13 +298,16 @@ export function BestFiveGame() {
           </div>
         </div>
 
-        <p className="mt-6 flex items-center justify-center gap-1.5 text-center text-xs text-slate-500">
-          <Layers className="h-3.5 w-3.5" aria-hidden="true" />
-          {isReadyToCheck
-            ? '5枚そろいました。答え合わせをしてみましょう（Enter キーでもOK）'
-            : `カードをタップして選びます（あと ${REQUIRED_CARDS - selectedIds.length} 枚）`}
-        </p>
+        <SelectionStatus
+          className="mt-6"
+          selected={selectedIds.length}
+          required={REQUIRED_CARDS}
+          readyMessage="選択完了。答え合わせができます（Enter キーでもOK）"
+          hintMessage={`カードをタップして選びます（あと ${REQUIRED_CARDS - selectedIds.length} 枚）`}
+          announcement="5枚選択済み。回答できます。"
+        />
       </section>
+      </QuestionStage>
 
       <div className="sticky bottom-0 z-10 -mx-4 flex gap-3 border-t border-white/10 bg-midnight-950/90 px-4 pt-3 pb-safe backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0">
         <Button
@@ -294,7 +322,12 @@ export function BestFiveGame() {
         </Button>
         <Button
           size="lg"
-          className="flex-1"
+          className={cn(
+            'flex-1',
+            // 押せるようになった瞬間と、そのまま待たせてしまったときだけ、そっと合図する
+            justBecameReady && 'animate-ready-in',
+            showIdleHint && 'btn-shimmer',
+          )}
           onClick={checkAnswer}
           disabled={!isReadyToCheck || isAnswered}
         >
@@ -317,6 +350,7 @@ export function BestFiveGame() {
         <ResultOverlay
           isCorrect={isCorrect}
           notice={notice}
+          isLeaving={isLeaving}
           primaryLabel={isLastQuestion ? '結果を見る' : '次の問題へ'}
           onPrimary={goNext}
         >
@@ -326,15 +360,46 @@ export function BestFiveGame() {
           <p className="mt-1 text-2xl font-bold text-white sm:text-3xl">{bestHand.nameJa}</p>
           <p className="mt-0.5 text-xs text-slate-500">{bestHand.nameEn}</p>
 
-          <CardHand
-            cards={puzzle.cards}
-            size="sm"
-            className="mt-5"
-            label="7枚のカード（正解の5枚を強調）"
-            highlightIds={bestIds}
-            dimOthers
-          />
-          <p className="mt-2 text-xs text-slate-500">緑の枠が最強の5枚／薄いカードは使いません</p>
+          {/* 不正解のときは、まず自分の5枚を見せてから、少し遅れて正解を並べる */}
+          {!isCorrect ? (
+            <div className="mt-5">
+              <p className="text-[0.7rem] font-semibold tracking-wider text-slate-400">
+                あなたの選択
+                {selectedHandName ? (
+                  <span className="ml-1.5 font-bold text-slate-200">（{selectedHandName}）</span>
+                ) : null}
+              </p>
+              <CardHand cards={selectedCards} size="sm" className="mt-2" label="あなたが選んだ5枚" />
+            </div>
+          ) : null}
+
+          <DelayedReveal className="mt-5" delayMs={isCorrect ? 0 : 150}>
+            <p className="text-[0.7rem] font-semibold tracking-wider text-emerald-300">
+              {isCorrect ? 'あなたが選んだ、最強の5枚' : '正解の5枚'}
+            </p>
+            <CardHand
+              cards={puzzle.best.cards}
+              size="sm"
+              className="mt-2"
+              label="最強の5枚"
+              highlightIds={bestIds}
+              liftHighlighted
+              highlightNote="最強の5枚"
+            />
+
+            <p className="mt-4 text-[0.7rem] font-semibold tracking-wider text-slate-500">
+              使わないカード
+            </p>
+            <CardHand
+              cards={unusedCards}
+              size="sm"
+              className="mt-2"
+              label="使わないカード"
+              highlightIds={[]}
+              dimOthers
+              dimNote="使わないカード"
+            />
+          </DelayedReveal>
 
           <p className="mt-5 text-sm leading-relaxed text-slate-300">
             {explainEvaluation(puzzle.best.cards) || bestHand.shortDescription}
@@ -342,12 +407,6 @@ export function BestFiveGame() {
 
           {!isCorrect ? (
             <>
-              {selectedHandName ? (
-                <p className="mt-4 inline-block rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-slate-400">
-                  あなたの5枚：
-                  <span className="font-bold text-slate-200">{selectedHandName}</span>
-                </p>
-              ) : null}
               <p className="mt-3 text-sm leading-relaxed text-slate-300">
                 {describeBestFiveMistake(selectedCards, puzzle.best)}
               </p>

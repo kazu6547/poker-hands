@@ -41,7 +41,8 @@ export function CardBoard({
             selected={isSelected}
             hinted={hintedId === card.id}
             celebrate={celebrate && isSelected}
-            disabled={selectionFull && !isSelected}
+            // 上限に達しているカードは、押されたら小さく押し返して理由を伝える
+            blocked={selectionFull && !isSelected}
             onSelect={onToggle}
           />
         );

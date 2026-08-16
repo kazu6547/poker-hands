@@ -8,8 +8,10 @@ import { QuizResult } from './QuizResult';
 import { QuizResultOverlay } from './QuizResultOverlay';
 import { CardHand } from '@/components/cards/CardHand';
 import { GameStatsBar } from '@/components/game/GameStatsBar';
+import { QuestionStage } from '@/components/game/QuestionStage';
 import { QuitPracticeDialog } from '@/components/game/QuitPracticeDialog';
 import { QUESTIONS_PER_SET, useGameSession } from '@/hooks/useGameSession';
+import { useQuestionTransition } from '@/hooks/useQuestionTransition';
 import { useProgress } from '@/hooks/useProgress';
 import { AchievementNotice, resolveAnswerFeedback } from '@/lib/achievements';
 import { playSound } from '@/lib/feedbackFx';
@@ -96,9 +98,7 @@ export function QuizGame() {
     [question, selected, isRetryQuestion, recordQuizAnswer, session, progress],
   );
 
-  const goNext = useCallback(() => {
-    if (selected === null) return;
-    playSound('next-question');
+  const commitNext = useCallback(() => {
     setNotice(undefined);
     answerLockRef.current = false;
 
@@ -124,7 +124,18 @@ export function QuizGame() {
     }
     setSelected(null);
     setIsRetryQuestion(false);
-  }, [selected, session, difficulty]);
+  }, [session, difficulty]);
+
+  const playNextSound = useCallback(() => playSound('next-question'), []);
+  const { isLeaving, requestNext } = useQuestionTransition({
+    onStart: playNextSound,
+    onCommit: commitNext,
+  });
+
+  const goNext = useCallback(() => {
+    if (selected === null) return;
+    requestNext();
+  }, [selected, requestNext]);
 
   /** 同じ役で別の問題に差し替えて、もう一度考えてもらう */
   const retrySameHand = useCallback(() => {
@@ -238,30 +249,31 @@ export function QuizGame() {
       </header>
 
       {/* 回答前は「問い」と5枚のカードだけを見せる（答えのヒントになる文言は出さない） */}
-      <section className="panel px-3 py-6 sm:px-8 sm:py-8">
-        <h1 className="text-center text-lg font-bold sm:text-xl">この5枚は何の役？</h1>
-        <CardHand
-          key={question.id}
-          cards={question.cards}
-          size="lg"
-          className="mt-6"
-          celebrate={isCorrect}
-          label="問題のカード5枚"
-        />
-      </section>
-
-      <section aria-label="選択肢" className="grid gap-3 sm:grid-cols-2">
-        {question.options.map((optionId, optionIndex) => (
-          <AnswerOption
-            key={optionId}
-            handId={optionId}
-            index={optionIndex}
-            state={optionState(optionId)}
-            disabled={isAnswered}
-            onSelect={handleAnswer}
+      <QuestionStage questionKey={question.id} isLeaving={isLeaving} className="space-y-6">
+        <section className="panel px-3 py-6 sm:px-8 sm:py-8">
+          <h1 className="text-center text-lg font-bold sm:text-xl">この5枚は何の役？</h1>
+          <CardHand
+            cards={question.cards}
+            size="lg"
+            className="mt-6"
+            celebrate={isCorrect}
+            label="問題のカード5枚"
           />
-        ))}
-      </section>
+        </section>
+
+        <section aria-label="選択肢" className="grid gap-3 sm:grid-cols-2">
+          {question.options.map((optionId, optionIndex) => (
+            <AnswerOption
+              key={optionId}
+              handId={optionId}
+              index={optionIndex}
+              state={optionState(optionId)}
+              disabled={isAnswered}
+              onSelect={handleAnswer}
+            />
+          ))}
+        </section>
+      </QuestionStage>
 
       {/* 正誤は画面全体のダイアログで伝える */}
       {isQuitOpen ? (
@@ -282,6 +294,7 @@ export function QuizGame() {
           cards={question.cards}
           isLastQuestion={isLastQuestion}
           notice={notice}
+          isLeaving={isLeaving}
           onNext={goNext}
           onRetry={retrySameHand}
         />

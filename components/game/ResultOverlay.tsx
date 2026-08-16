@@ -1,6 +1,6 @@
 'use client';
 
-import { KeyboardEvent as ReactKeyboardEvent, ReactNode, useEffect, useRef } from 'react';
+import { KeyboardEvent as ReactKeyboardEvent, ReactNode, useEffect, useRef, useState } from 'react';
 import { ArrowRight, Check, RefreshCw, X } from 'lucide-react';
 import { AchievementBadge } from './AchievementBadge';
 import { Button } from '@/components/ui/Button';
@@ -21,7 +21,14 @@ export interface ResultOverlayProps {
   onSecondary?: () => void;
   /** 最下部の小さな案内（省略時は Enter の説明） */
   hint?: string;
+  /** 次の問題へ移る直前の、短い退場中か */
+  isLeaving?: boolean;
 }
+
+/** 回答したクリックがそのまま「次へ」に貫通しないよう、少しだけ受け付けない */
+const CLICK_THROUGH_GUARD_MS = 250;
+/** 解説を読む間を置いてから、次の一手をそっと示すまでの時間 */
+const NEXT_EMPHASIS_DELAY_MS = 420;
 
 /**
  * 4つのゲームモードで共通の結果表示ダイアログ。
@@ -37,9 +44,13 @@ export function ResultOverlay({
   secondaryLabel,
   onSecondary,
   hint = 'Enter キーでも次に進めます',
+  isLeaving = false,
 }: ResultOverlayProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const primaryButtonRef = useRef<HTMLButtonElement>(null);
+  /** 開いた直後だけ「次へ」を受け付けない（回答のクリックが流れ込むのを防ぐ） */
+  const acceptsPressRef = useRef(false);
+  const [isNextEmphasized, setIsNextEmphasized] = useState(false);
 
   // 開いたら主要ボタンにフォーカスを移し、背面のスクロールを止める
   useEffect(() => {
@@ -50,6 +61,24 @@ export function ResultOverlay({
       document.body.style.overflow = previousOverflow;
     };
   }, []);
+
+  useEffect(() => {
+    const guardTimer = window.setTimeout(() => {
+      acceptsPressRef.current = true;
+    }, CLICK_THROUGH_GUARD_MS);
+    // 解説を読む余白を残してから、「次へ」の存在感を一度だけ上げる
+    const emphasisTimer = window.setTimeout(() => setIsNextEmphasized(true), NEXT_EMPHASIS_DELAY_MS);
+    return () => {
+      window.clearTimeout(guardTimer);
+      window.clearTimeout(emphasisTimer);
+    };
+  }, []);
+
+  /** 直前のクリックが流れ込んだだけの操作は受け付けない */
+  const handlePrimary = () => {
+    if (!acceptsPressRef.current) return;
+    onPrimary();
+  };
 
   // ダイアログ内でフォーカスが循環するようにする
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -69,7 +98,12 @@ export function ResultOverlay({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-midnight-950/85 p-3 backdrop-blur-sm sm:items-center sm:p-6">
+    <div
+      className={cn(
+        'fixed inset-0 z-50 flex items-end justify-center bg-midnight-950/85 p-3 backdrop-blur-sm transition-opacity duration-100 ease-in sm:items-center sm:p-6',
+        isLeaving && 'pointer-events-none opacity-0',
+      )}
+    >
       <div
         ref={dialogRef}
         role="dialog"
@@ -107,7 +141,13 @@ export function ResultOverlay({
         {notice ? <AchievementBadge notice={notice} /> : null}
 
         <div className="mt-7 flex flex-col gap-3">
-          <Button ref={primaryButtonRef} size="lg" fullWidth onClick={onPrimary}>
+          <Button
+            ref={primaryButtonRef}
+            size="lg"
+            fullWidth
+            onClick={handlePrimary}
+            className={cn(isNextEmphasized && 'animate-ready-in shadow-[0_18px_36px_-14px_rgba(52,211,153,0.95)]')}
+          >
             {primaryLabel}
             <ArrowRight className="h-5 w-5" aria-hidden="true" />
           </Button>
