@@ -6,11 +6,11 @@ import { HeroCardFan } from '@/components/home/HeroCardFan';
 import { ModeCard } from '@/components/home/ModeCard';
 import { ProgressSummary } from '@/components/home/ProgressSummary';
 import { SecondaryModeCard } from '@/components/home/SecondaryModeCard';
-import { WeakHands } from '@/components/home/WeakHands';
 
 /**
  * ホーム。
  * 表示順は「サービス名 → メインの2モード → その他 → 学習記録 → 役一覧 → はじめての方へ」で固定する。
+ * 苦手なトップ3やモード別の内訳は、学習記録画面にまとめてホームを短く保つ。
  * 開いた瞬間に「役を当てる」「役を作る」が目に入ることを最優先にしている。
  */
 export default function HomePage() {
@@ -68,11 +68,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 3. 学習記録 */}
+      {/* 3. 学習記録（詳しい内訳は「学習の記録」画面へ） */}
       <ProgressSummary />
-
-      {/* 3-2. 苦手な役（記録がたまってから表示される） */}
-      <WeakHands />
 
       {/* 4. 役一覧 */}
       <Link

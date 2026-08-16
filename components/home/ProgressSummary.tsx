@@ -1,18 +1,20 @@
 'use client';
 
-import { useState } from 'react';
-import { Award, CalendarCheck, CheckCircle2, Flame, RotateCcw } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowRight, Award, CalendarCheck, CheckCircle2, Flame } from 'lucide-react';
 import { useProgress } from '@/hooks/useProgress';
 import { accuracyPercent, currentStudyStreak, formatStudiedAt } from '@/lib/progress';
 import { cn } from '@/lib/cn';
 
 /**
  * ホームの学習記録サマリー。
+ * 数字は3つだけにして、詳しい内訳（苦手なトップ3・モード別・役別）は
+ * タップした先の「学習の記録」画面にまとめている。
+ *
  * 読み込み前後で高さが変わらないよう、常に同じ枠を描画する。
  */
 export function ProgressSummary() {
-  const { progress, isReady, reset } = useProgress();
-  const [isConfirmingReset, setIsConfirmingReset] = useState(false);
+  const { progress, isReady } = useProgress();
 
   const hasRecord = isReady && progress.totalAnswers > 0;
   const accuracy = accuracyPercent(progress.totalCorrect, progress.totalAnswers);
@@ -25,11 +27,16 @@ export function ProgressSummary() {
   ];
 
   return (
-    <section className="panel p-4 sm:p-5" aria-label="学習の記録" aria-busy={!isReady}>
+    <Link
+      href="/records"
+      aria-label="学習の記録を見る"
+      className="panel group block p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-400/40 sm:p-5"
+    >
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="eyebrow">学習の記録</p>
-          <p className="mt-1 truncate text-xs text-slate-500">
+          {/* 記録が無いときの案内は長いので、狭い画面では折り返して全文見せる */}
+          <p className="mt-1 text-xs leading-snug text-slate-500">
             {hasRecord
               ? `最終学習：${formatStudiedAt(progress.lastStudiedAt)}`
               : 'まだ記録はありません。最初の1問に挑戦しよう。'}
@@ -42,29 +49,13 @@ export function ProgressSummary() {
           ) : null}
         </div>
 
-        {hasRecord ? (
-          <button
-            type="button"
-            onClick={() => {
-              if (isConfirmingReset) {
-                reset();
-                setIsConfirmingReset(false);
-              } else {
-                setIsConfirmingReset(true);
-              }
-            }}
-            onBlur={() => setIsConfirmingReset(false)}
-            className={cn(
-              'flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors',
-              isConfirmingReset
-                ? 'bg-rose-500/15 text-rose-300'
-                : 'text-slate-500 hover:bg-white/5 hover:text-slate-300',
-            )}
-          >
-            <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-            {isConfirmingReset ? '本当に消す？' : 'リセット'}
-          </button>
-        ) : null}
+        <span className="flex shrink-0 items-center gap-1 text-xs font-semibold text-emerald-300">
+          くわしく
+          <ArrowRight
+            className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1"
+            aria-hidden="true"
+          />
+        </span>
       </div>
 
       <dl className="grid grid-cols-3 gap-2 sm:gap-3">
@@ -80,7 +71,7 @@ export function ProgressSummary() {
                 3つの数値が横並びでそろうよう、見出しの高さだけ確保しておく。
               */}
               <dt className="flex min-h-[2.4em] items-center justify-center gap-1 text-[0.65rem] font-medium leading-tight text-slate-400 sm:min-h-0 sm:text-xs">
-                <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <Icon className="hidden h-3.5 w-3.5 shrink-0 min-[360px]:block" aria-hidden="true" />
                 <span className="min-w-0">{item.label}</span>
               </dt>
               <dd className={cn('mt-1 text-lg font-bold tabular-nums sm:text-xl', item.tone)}>
@@ -90,6 +81,6 @@ export function ProgressSummary() {
           );
         })}
       </dl>
-    </section>
+    </Link>
   );
 }

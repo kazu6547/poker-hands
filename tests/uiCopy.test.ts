@@ -107,3 +107,69 @@ describe('危ないコードが混ざっていない', () => {
     assert.deepEqual(found.map((file) => file.path), []);
   });
 });
+
+describe('ホームと学習記録の分担', () => {
+  const home = readFileSync(join(ROOT, 'app/page.tsx'), 'utf8');
+
+  it('苦手なトップ3はホームに置かない', () => {
+    assert.ok(!home.includes('WeakHands'), 'ホームがまだ苦手な役を読み込んでいる');
+    // コメントを取り除いてから、画面に出る文字として残っていないか見る
+    const withoutComments = home
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*$/gm, '');
+    assert.ok(!withoutComments.includes('苦手'), 'ホームに苦手の文言が残っている');
+  });
+
+  it('ホームから学習記録画面へ行ける', () => {
+    const summary = readFileSync(join(ROOT, 'components/home/ProgressSummary.tsx'), 'utf8');
+    assert.match(summary, /href="\/records"/);
+  });
+
+  it('学習記録画面に苦手なトップ3がある', () => {
+    const detail = readFileSync(join(ROOT, 'components/records/ProgressDetail.tsx'), 'utf8');
+    assert.ok(detail.includes('<WeakHands'), '学習記録に苦手なトップ3が無い');
+    const weak = readFileSync(join(ROOT, 'components/records/WeakHands.tsx'), 'utf8');
+    assert.ok(weak.includes('苦手なトップ3'), '見出しが違う');
+    // 既存の算出ロジックをそのまま使う（複製しない）
+    assert.ok(weak.includes("from '@/lib/progress'"), '苦手役の算出を作り直している');
+    assert.ok(weak.includes('weakestHands('), '既存の算出関数を使っていない');
+  });
+
+  it('責めるような言い回しを使わない', () => {
+    const weak = readFileSync(join(ROOT, 'components/records/WeakHands.tsx'), 'utf8');
+    for (const word of ['あなたの弱点', '苦手すぎる', 'できていない役', '要復習']) {
+      assert.ok(!weak.includes(word), `${word} という表現が入っている`);
+    }
+  });
+});
+
+describe('サウンド・振動の開閉UI', () => {
+  const card = readFileSync(join(ROOT, 'components/home/FeedbackSettingsCard.tsx'), 'utf8');
+  const gettingStarted = readFileSync(join(ROOT, 'components/home/GettingStarted.tsx'), 'utf8');
+
+  it('「はじめての方へ」と同じ開閉パターンになっている', () => {
+    for (const marker of ['aria-expanded={isOpen}', 'aria-controls={PANEL_ID}', "grid-rows-[1fr]", "grid-rows-[0fr]"]) {
+      assert.ok(card.includes(marker), `${marker} が無い`);
+      assert.ok(gettingStarted.includes(marker), `はじめての方へ側に ${marker} が無い`);
+    }
+  });
+
+  it('初期状態は閉じている', () => {
+    assert.match(card, /useState\(false\)/);
+  });
+
+  it('閉じているときは中のトグルを操作対象から外す', () => {
+    assert.ok(card.includes('inert={!isOpen}'), '閉じたパネルが Tab 順に残る');
+  });
+
+  it('開閉ではサウンド・振動の設定値を変えない', () => {
+    const toggleBlock = card.slice(card.indexOf('const toggleOpen'), card.indexOf('const soundOn'));
+    assert.ok(!toggleBlock.includes('update('), '開閉で設定を書き換えている');
+    assert.ok(!toggleBlock.includes('playSound('), '開閉で音を鳴らしている');
+    assert.ok(!toggleBlock.includes('previewHaptics('), '開閉で振動させている');
+  });
+
+  it('閉じていても現在の状態が文字で分かる', () => {
+    assert.ok(card.includes("サウンド ${soundOn ? 'ON' : 'OFF'}"), '状態の要約が無い');
+  });
+});
